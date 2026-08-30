@@ -184,3 +184,28 @@ proximosAVencer: 1 }`, coincidiendo con lo esperado en cada categoría.
 
 La ventana de "próximo a vencer" (3 días) es una constante local, no un requisito del enunciado con
 un valor fijo — se documenta acá para poder justificarla y ajustarla si hace falta.
+
+## Frontend: scaffold
+
+Se generó con `npm create vite@latest -- --template react-ts` y después se recortó lo que no
+correspondía a esta fase: se sacaron los assets y estilos de la landing de demo (`App.css`,
+`hero.png`, íconos), y se sacó **Oxlint** (el linter que trae el template por defecto) junto con su
+script y configuración — el análisis estático es una decisión deliberada del TP5, no algo que
+convenga heredar sin elegirlo a propósito. También se sacaron el `README.md` y el `.gitignore` que
+trae el scaffold: el segundo duplicaba reglas que ya cubre el `.gitignore` de la raíz del proyecto
+(una sola fuente de verdad para todo el repo, como se decidió en el TP1).
+
+Se agregó `react-router-dom` para las tres rutas (`/`, `/equipamiento`, `/prestamos`) en vez de
+armar la navegación a mano con estado — es la forma estándar de la industria para esto, y evita
+reinventar algo que la librería ya resuelve bien (back/forward del navegador, resaltado del link
+activo).
+
+**Prueba de conectividad real:** el `vite.config.ts` proxea `/api` hacia `http://localhost:3000`
+(el mismo prefijo relativo que en producción va a traducir nginx, TP2). El plan original de esta
+fase mencionaba probar contra `/api/health` — pero el healthcheck vive en `/health` (sin el prefijo
+`/api`, ver la sección "API inicial" del diseño), a propósito: no es una ruta que la SPA deba poder
+alcanzar a través del proxy, es un chequeo de infraestructura que en el TP2 va a golpear el
+contenedor del backend directamente. Se probó la conexión real contra `GET /api/dashboard/resumen`
+en su lugar, que sí es un endpoint pensado para la SPA. Se verificó con el navegador (Dashboard
+muestra la respuesta real del backend, `{"totalEquipos":0,...}`) y navegando entre las tres
+pantallas, confirmando con `window.location.href` que el ruteo por cliente cambia la URL de verdad.
