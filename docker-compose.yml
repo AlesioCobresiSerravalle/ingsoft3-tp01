@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: campusgear
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  # Servicio de un solo uso: aplica las migraciones y termina. Reutiliza la
+  # etapa "build" del Dockerfile del backend (la que sí tiene el CLI de
+  # Prisma) en vez de instalarlo en la imagen final que sirve tráfico — ver
+  # decisiones.md, sección "Docker Compose".
+  migrate:
+    build:
+      context: ./backend
+      target: build
+    environment:
+      DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/campusgear?schema=public"
+    entrypoint: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/campusgear?schema=public"
+    ports:
+      - "3000:3000" # para curl/Postman: el browser entra por el 8080 del frontend
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
