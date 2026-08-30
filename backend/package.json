@@ -3,15 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0"
+    "@prisma/client": "^6.19.3",
+    "express": "^5.1.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
-    "prisma": "^6.1.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
