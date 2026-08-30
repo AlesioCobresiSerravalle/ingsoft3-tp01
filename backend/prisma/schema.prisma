@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EstadoPrestamo {
+  ACTIVO
+  DEVUELTO
+}
+
+// Equipo NO tiene un campo "estado": se deriva de si tiene o no un préstamo
+// activo (un Prestamo con fechaDevolucionReal = null). Ver decisiones.md,
+// sección "Modelo de datos", para la justificación completa.
+model Equipo {
+  id          String     @id @default(uuid())
+  nombre      String
+  categoria   String
+  codigo      String     @unique
+  descripcion String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  prestamos   Prestamo[]
+}
+
+model Persona {
+  id        String     @id @default(uuid())
+  nombre    String
+  email     String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  prestamos Prestamo[]
+}
+
+model Prestamo {
+  id                      String         @id @default(uuid())
+  equipoId                String
+  personaId               String
+  equipo                  Equipo         @relation(fields: [equipoId], references: [id], onDelete: Restrict)
+  persona                 Persona        @relation(fields: [personaId], references: [id], onDelete: Restrict)
+  fechaPrestamo           DateTime       @default(now())
+  fechaDevolucionPrevista DateTime
+  fechaDevolucionReal     DateTime?
+  // "Vencido" NO es un valor de este enum: se calcula al leer, comparando
+  // fechaDevolucionPrevista contra la fecha actual mientras estado = ACTIVO.
+  estado                  EstadoPrestamo @default(ACTIVO)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([equipoId])
+  @@index([personaId])
+  @@index([estado])
+}

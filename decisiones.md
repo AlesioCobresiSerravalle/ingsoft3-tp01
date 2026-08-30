@@ -50,3 +50,41 @@ real, no una simulación. Cada paso hecho en la web de GitHub —crear los Pull 
 conflicto, publicar la release— lo hice yo mismo, viendo el resultado en la propia interfaz de
 GitHub y comparándolo contra lo que la guía de la cátedra describe. Las cuatro capturas de
 `evidencias.md` son la prueba de que lo que se describe en este documento efectivamente ocurrió.
+
+## Modelo de datos (previo al TP2)
+
+Antes de escribir cualquier endpoint, se diseñó el modelo de datos en `backend/prisma/schema.prisma`
+con tres entidades: `Equipo`, `Persona` y `Prestamo`.
+
+**Por qué `Equipo` no tiene un campo `estado` (DISPONIBLE/PRESTADO) persistido.** Guardar ese campo
+como columna obliga a mantenerlo sincronizado a mano en cada punto donde se crea o se devuelve un
+préstamo — y un solo lugar donde se olvide esa actualización deja el sistema en un estado
+inconsistente (equipo marcado "disponible" con un préstamo activo, o viceversa). En cambio, derivar
+el estado a partir de si existe o no un `Prestamo` activo para ese equipo (uno con
+`fechaDevolucionReal = null`) hace que la inconsistencia sea **imposible por construcción**: no hay
+dos lugares donde el mismo dato pueda decir cosas distintas. El costo es una consulta extra al
+listar equipos (buscar si tiene un préstamo activo) en vez de leer una columna — irrelevante para el
+volumen de datos de esta aplicación, y minúsculo comparado con el riesgo de inconsistencia.
+
+**Por qué "vencido" tampoco se persiste.** Un préstamo vencido es, simplemente, un préstamo activo
+(`estado = ACTIVO`) cuya `fechaDevolucionPrevista` ya pasó. Guardarlo como un tercer valor del enum
+`EstadoPrestamo` exigiría un proceso que lo actualizara cada vez que cruza esa fecha (un cron, por
+ejemplo), con el riesgo de quedar desactualizado entre corridas. Calcularlo al leer
+(`estado === 'ACTIVO' && fechaDevolucionPrevista < ahora`) es siempre exacto y no depende de que
+ningún proceso se haya ejecutado a tiempo.
+
+**Qué restricciones van en cada capa:** la integridad referencial (que un préstamo no pueda apuntar
+a un equipo o persona inexistente) la resuelve Postgres con claves foráneas
+(`onDelete: Restrict`, para no poder borrar un equipo o persona con historial de préstamos); el
+formato de los datos de entrada (fechas válidas, `fechaDevolucionPrevista >= fechaPrestamo`, email
+con formato válido) se valida con Zod antes de llegar a la base; y que un equipo no se pueda prestar
+dos veces al mismo tiempo es una regla de negocio que se resuelve en el service, dentro de una
+transacción, en el momento de crear el préstamo.
+
+**Nota sobre una vulnerabilidad reportada por `npm audit`:** al instalar las dependencias del
+backend, `npm audit` marca 3 vulnerabilidades "high" en `deepmerge-ts`, una dependencia interna del
+**CLI** de Prisma (`@prisma/config`), no de `@prisma/client` (lo único que corre en producción). No
+hay todavía una versión estable de Prisma que la corrija — la única más nueva disponible es una
+release candidate (`8.0.0-rc.12`), y no se adopta un release candidate en un proyecto que hay que
+mantener y defender todo el semestre. Queda como riesgo conocido, aceptado y no bloqueante, a
+revisar cuando Prisma publique una versión estable que la resuelva.
