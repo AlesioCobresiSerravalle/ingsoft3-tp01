@@ -4,6 +4,7 @@ import * as personasApi from "../api/personas";
 import type { Equipo } from "../types/equipo";
 import type { Persona } from "../types/persona";
 import type { PrestamoInput } from "../types/prestamo";
+import { StateMessage } from "./StateMessage";
 
 interface Props {
   onSubmit: (data: PrestamoInput) => Promise<void>;
@@ -77,70 +78,85 @@ export function PrestamoForm({ onSubmit }: Props) {
   return (
     <form onSubmit={handleSubmit}>
       <h2>Registrar préstamo</h2>
-      {error && <p role="alert">{error}</p>}
+      <p className="card-description">
+        Elegí un equipo disponible y la persona que se lo lleva, con la fecha en que debería
+        devolverlo.
+      </p>
+      {error && <StateMessage tono="error">{error}</StateMessage>}
 
-      <label>
-        Equipo (solo disponibles)
-        <select value={equipoId} onChange={(e) => setEquipoId(e.target.value)} required>
-          <option value="" disabled>
-            Elegí un equipo
-          </option>
-          {equipos.map((equipo) => (
-            <option key={equipo.id} value={equipo.id}>
-              {equipo.nombre} ({equipo.codigo})
+      <div className="field-row">
+        <label className="field">
+          Equipo (solo disponibles)
+          <select value={equipoId} onChange={(e) => setEquipoId(e.target.value)} required>
+            <option value="" disabled>
+              Elegí un equipo
             </option>
-          ))}
-        </select>
-      </label>
+            {equipos.map((equipo) => (
+              <option key={equipo.id} value={equipo.id}>
+                {equipo.nombre} ({equipo.codigo})
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <label>
-        Persona
-        <select value={personaId} onChange={(e) => setPersonaId(e.target.value)} required>
-          <option value="" disabled>
-            Elegí una persona
-          </option>
-          {personas.map((persona) => (
-            <option key={persona.id} value={persona.id}>
-              {persona.nombre} ({persona.email})
+        <label className="field">
+          Persona
+          <select value={personaId} onChange={(e) => setPersonaId(e.target.value)} required>
+            <option value="" disabled>
+              Elegí una persona
             </option>
-          ))}
-        </select>
-      </label>
+            {personas.map((persona) => (
+              <option key={persona.id} value={persona.id}>
+                {persona.nombre} ({persona.email})
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <fieldset>
+        <label className="field">
+          Fecha de devolución prevista
+          <input
+            type="date"
+            value={fechaDevolucionPrevista}
+            onChange={(e) => setFechaDevolucionPrevista(e.target.value)}
+            required
+          />
+        </label>
+      </div>
+
+      <fieldset className="field-group">
         <legend>¿La persona no está en la lista?</legend>
-        <input
-          placeholder="Nombre"
-          value={nuevaPersonaNombre}
-          onChange={(e) => setNuevaPersonaNombre(e.target.value)}
-        />
-        <input
-          placeholder="Email"
-          value={nuevaPersonaEmail}
-          onChange={(e) => setNuevaPersonaEmail(e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={handleAgregarPersona}
-          disabled={!nuevaPersonaNombre || !nuevaPersonaEmail}
-        >
-          Agregar persona
-        </button>
+        <div className="field-row">
+          <div className="field">
+            <input
+              placeholder="Nombre"
+              value={nuevaPersonaNombre}
+              onChange={(e) => setNuevaPersonaNombre(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <input
+              placeholder="Email"
+              value={nuevaPersonaEmail}
+              onChange={(e) => setNuevaPersonaEmail(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleAgregarPersona}
+            disabled={!nuevaPersonaNombre || !nuevaPersonaEmail}
+          >
+            Agregar persona
+          </button>
+        </div>
       </fieldset>
 
-      <label>
-        Fecha de devolución prevista
-        <input
-          type="date"
-          value={fechaDevolucionPrevista}
-          onChange={(e) => setFechaDevolucionPrevista(e.target.value)}
-          required
-        />
-      </label>
-
-      <button type="submit" disabled={enviando || !equipoId || !personaId}>
-        Registrar préstamo
-      </button>
+      <div className="form-actions">
+        <button type="submit" className="btn btn-primary" disabled={enviando || !equipoId || !personaId}>
+          Registrar préstamo
+        </button>
+      </div>
     </form>
   );
 }

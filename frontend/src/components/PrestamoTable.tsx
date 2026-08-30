@@ -1,4 +1,6 @@
 import type { Prestamo } from "../types/prestamo";
+import { StateMessage } from "./StateMessage";
+import { StatusBadge } from "./StatusBadge";
 
 interface Props {
   prestamos: Prestamo[];
@@ -16,37 +18,49 @@ function formatearFecha(iso: string) {
 
 export function PrestamoTable({ prestamos, onDevolucion }: Props) {
   if (prestamos.length === 0) {
-    return <p>No hay préstamos para mostrar.</p>;
+    return <StateMessage tono="empty">No hay préstamos para mostrar todavía.</StateMessage>;
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Equipo</th>
-          <th>Persona</th>
-          <th>Prestado el</th>
-          <th>Devolución prevista</th>
-          <th>Estado</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {prestamos.map((prestamo) => (
-          <tr key={prestamo.id} style={prestamo.vencido ? { color: "crimson" } : undefined}>
-            <td>{prestamo.equipo.nombre}</td>
-            <td>{prestamo.persona.nombre}</td>
-            <td>{formatearFecha(prestamo.fechaPrestamo)}</td>
-            <td>{formatearFecha(prestamo.fechaDevolucionPrevista)}</td>
-            <td>{prestamo.vencido ? "VENCIDO" : prestamo.estado}</td>
-            <td>
-              {prestamo.estado === "ACTIVO" && (
-                <button onClick={() => onDevolucion(prestamo)}>Registrar devolución</button>
-              )}
-            </td>
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Equipo</th>
+            <th>Persona</th>
+            <th>Prestado el</th>
+            <th>Devolución prevista</th>
+            <th>Estado</th>
+            <th></th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {prestamos.map((prestamo) => (
+            <tr key={prestamo.id}>
+              <td>{prestamo.equipo.nombre}</td>
+              <td>{prestamo.persona.nombre}</td>
+              <td>{formatearFecha(prestamo.fechaPrestamo)}</td>
+              <td>{formatearFecha(prestamo.fechaDevolucionPrevista)}</td>
+              <td>
+                {prestamo.vencido ? (
+                  <StatusBadge label="Vencido" tono="danger" />
+                ) : prestamo.estado === "ACTIVO" ? (
+                  <StatusBadge label="Activo" tono="info" />
+                ) : (
+                  <StatusBadge label="Devuelto" tono="success" />
+                )}
+              </td>
+              <td>
+                {prestamo.estado === "ACTIVO" && (
+                  <button className="btn btn-primary btn-sm" onClick={() => onDevolucion(prestamo)}>
+                    Registrar devolución
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
