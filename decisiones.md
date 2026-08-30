@@ -230,3 +230,34 @@ arquitectura general. Se probó en un navegador real, de punta a punta:
 No se agregó debounce a la búsqueda (dispara una request por cada tecla): para el volumen de datos
 de esta app la simplicidad vale más que la optimización, y agregarlo ahora sería resolver un
 problema de performance que todavía no existe.
+
+## Frontend: Préstamos
+
+El diseño de la interfaz (sección 5) solo define tres pantallas — Dashboard, Equipamiento,
+Préstamos — sin una pantalla propia de gestión de Personas. Como igual hace falta elegir una
+persona al registrar un préstamo, el formulario resuelve esto con un selector de personas
+existentes (`GET /api/personas`) más un alta rápida inline que llama al mismo endpoint de creación
+del TP — sin construir un CRUD de Personas que el enunciado no pide.
+
+**Un bug real encontrado y corregido:** al registrar un préstamo con devolución prevista el
+`06/09/2026`, la tabla mostraba `05/09/2026` — un día antes del elegido. Causa: `<input
+type="date">` no lleva hora, así que el valor
+`"2026-09-06"` se interpreta como medianoche **UTC**; `toLocaleDateString()` sin zona horaria
+explícita lo convierte a la hora **local** del navegador antes de mostrarlo, y en cualquier huso
+horario detrás de UTC eso cae en el día anterior. No es cosmético: es un desfasaje real de fecha. Se
+corrigió forzando `{ timeZone: "UTC" }` en el formateo — estas fechas representan un día elegido, no
+un instante preciso, así que tiene que mostrarse igual sin importar dónde esté el navegador.
+
+Se probó el ciclo completo en un navegador real:
+
+- registrar un préstamo → el equipo prestado desaparece del selector de "equipos disponibles" del
+  propio formulario, y en `Equipamiento` pasa a `PRESTADO` sin haber tocado esa pantalla;
+- registrar la devolución → el préstamo pasa a `DEVUELTO` (el botón de devolución desaparece), y en
+  `Equipamiento` el equipo vuelve a `DISPONIBLE`;
+- un préstamo vencido (insertado directo con Prisma, igual que en la Fase 7, porque el `<input
+  type="date">` no permite la precisión de segundos que usó esa prueba) se muestra en rojo con la
+  etiqueta `VENCIDO`, y el filtro "Vencidos" lo aísla correctamente del resto.
+
+No se implementó ningún manejo de estado global ni cache entre pantallas (cada pantalla vuelve a
+pedir sus datos al navegar): para el tamaño de esta app alcanza, y agregarlo ahora sería
+sobre-ingeniería.
