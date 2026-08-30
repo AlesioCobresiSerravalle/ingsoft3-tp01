@@ -273,3 +273,37 @@ verificado por API en esa fase — misma fuente de datos, dos maneras de comprob
 Con esto queda completo el MVP de las tres pantallas (Dashboard, Equipamiento, Préstamos) definidas
 en el diseño de la interfaz, funcionando de punta a punta contra el backend real. Lo que sigue
 (Fases 13 en adelante) ya no agrega pantallas nuevas: es integración, Docker y CI.
+
+## Integración end-to-end y elección de CampusGear como app del semestre
+
+Se hizo un recorrido manual completo del MVP corriendo local (sin Docker todavía), con datos
+representativos del dominio real (kits Arduino, multímetro, calculadora, protoboard, cargador) en
+vez de datos de prueba genéricos:
+
+- se cargaron los 5 equipos desde la UI de Equipamiento;
+- se registraron 4 préstamos desde la UI de Préstamos, cubriendo los 4 estados que se pueden lograr
+  sin manipular el reloj (activo al día, activo próximo a vencer, devuelto, y uno vencido insertado
+  directo con Prisma porque el `<input type="date">` no permite fechas pasadas, coherente con la
+  regla de negocio 3);
+- el Dashboard, Equipamiento y Préstamos coincidieron exactamente entre sí (`5 equipos, 2
+  disponibles, 3 prestados, 1 vencido, 1 próximo a vencer`) sin ninguna corrección manual;
+- se confirmó que los datos sobreviven tanto a un refresco completo del navegador como a **reiniciar
+  el proceso del backend** — la prueba más directa de que el estado vive en PostgreSQL y no en
+  memoria del servidor.
+
+No se encontró ningún defecto nuevo en este repaso: los dos bugs reales de esta etapa (el `500`
+incorrecto ante un body malformado, y el off-by-one de zona horaria en las fechas) ya se habían
+encontrado y corregido en las Fases 3 y 11 respectivamente.
+
+**Por qué CampusGear como app del semestre, contra los criterios de la guía del TP2 (§3.3):**
+
+- *¿Buildea y corre localmente hoy, sin magia?* Sí — se demostró en esta misma fase, de punta a
+  punta, sin Docker.
+- *¿Tiene o se le puede escribir tests?* Sí, y con ventaja: la lógica de negocio vive aislada en
+  `services/` (sin Express ni Prisma acoplados en el mismo lugar), pensada desde la Fase 3 para
+  poder testearse con Vitest sin levantar un servidor, y las rutas se pueden testear con Supertest
+  importando `app.ts` sin abrir un puerto — ambas cosas listas para el TP5.
+- *¿Se entiende el código lo suficiente como para modificarlo?* Sí: se construyó módulo por módulo
+  a lo largo de 12 fases, no se adoptó un proyecto ajeno.
+- *Tamaño:* tres entidades, tres pantallas, seis reglas de negocio — el CRUD + 2-3 pantallas que
+  pide la guía, sin agregar alcance que no sume nota.
