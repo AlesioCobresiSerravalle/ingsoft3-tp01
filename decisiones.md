@@ -128,3 +128,10 @@ validada de punta a punta antes de tiempo.
 no usa), así que ni siquiera una ruta simple como `/:id` tipa `req.params.id` como `string` a secas.
 Se resolvió tipando cada handler explícitamente como `Request<{ id: string }>` en vez de `Request`
 genérico — más preciso, y evita tener que castear el valor a mano en cada controller.
+
+## API de Personas
+
+Mismo patrón de capas y de traducción de errores de Prisma que Equipos (`P2002` → `409` para el
+`email` duplicado, `P2003` → `409` para no poder borrar una persona con préstamos asociados), sin la
+complejidad del estado derivado porque `Persona` no tiene ningún estado que calcular. No se repite
+la prueba manual del `409` por FK: es la misma ruta de código ya validada en la fase anterior.
