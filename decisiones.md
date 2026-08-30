@@ -209,3 +209,24 @@ contenedor del backend directamente. Se probó la conexión real contra `GET /ap
 en su lugar, que sí es un endpoint pensado para la SPA. Se verificó con el navegador (Dashboard
 muestra la respuesta real del backend, `{"totalEquipos":0,...}`) y navegando entre las tres
 pantallas, confirmando con `window.location.href` que el ruteo por cliente cambia la URL de verdad.
+
+## Frontend: Equipamiento
+
+La pantalla no valida ninguna regla de negocio por su cuenta (ni "el código no puede repetirse" ni
+"no se puede borrar un equipo prestado"): el formulario solo muestra el mensaje de error que
+devuelve el backend (`err.message` de la excepción que lanza `apiFetch`), tal como se decidió en la
+arquitectura general. Se probó en un navegador real, de punta a punta:
+
+- alta de un equipo → aparece en la tabla con `estado: DISPONIBLE`;
+- búsqueda por texto → filtra correctamente (y "sin resultados" también se ve bien);
+- edición → precarga el formulario y actualiza la fila sin recargar la página;
+- alta con código duplicado → la UI muestra tal cual el mensaje del backend ("Ya existe un equipo
+  con ese código"), sin inventar un mensaje propio;
+- intento de borrar un equipo con un préstamo activo (insertado directo con Prisma, igual que en la
+  Fase 5) → la UI muestra el `409` del backend ("No se puede eliminar un equipo con préstamos
+  asociados...") y el equipo **no** desaparece de la tabla — el error no deja la interfaz en un
+  estado inconsistente con la base.
+
+No se agregó debounce a la búsqueda (dispara una request por cada tecla): para el volumen de datos
+de esta app la simplicidad vale más que la optimización, y agregarlo ahora sería resolver un
+problema de performance que todavía no existe.
