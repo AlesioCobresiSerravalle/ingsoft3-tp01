@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PageHeader } from "../components/PageHeader";
+import { StateMessage } from "../components/StateMessage";
 import { StatTile } from "../components/StatTile";
 import * as dashboardApi from "../api/dashboard";
 import type { ResumenDashboard } from "../types/dashboard";
@@ -16,15 +18,19 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1>Dashboard</h1>
-      {error && <p role="alert">{error}</p>}
+      <PageHeader
+        title="Dashboard"
+        description="Estado general del inventario: cuántos equipos hay, cuántos están disponibles o prestados, y qué préstamos necesitan atención."
+      />
+      {error && <StateMessage tono="error">{error}</StateMessage>}
+      {!resumen && !error && <StateMessage tono="loading">Cargando resumen…</StateMessage>}
       {resumen && (
         <div className="stat-grid">
-          <StatTile etiqueta="Equipos totales" valor={resumen.totalEquipos} />
-          <StatTile etiqueta="Disponibles" valor={resumen.disponibles} />
-          <StatTile etiqueta="Prestados" valor={resumen.prestados} />
-          <StatTile etiqueta="Vencidos" valor={resumen.vencidos} />
-          <StatTile etiqueta="Próximos a vencer" valor={resumen.proximosAVencer} />
+          <StatTile etiqueta="Equipos totales" valor={resumen.totalEquipos} acento="brand" />
+          <StatTile etiqueta="Disponibles" valor={resumen.disponibles} acento="success" />
+          <StatTile etiqueta="Prestados" valor={resumen.prestados} acento="info" />
+          <StatTile etiqueta="Vencidos" valor={resumen.vencidos} acento="danger" />
+          <StatTile etiqueta="Próximos a vencer" valor={resumen.proximosAVencer} acento="warning" />
         </div>
       )}
     </div>

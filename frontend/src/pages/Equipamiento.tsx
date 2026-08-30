@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { Card } from "../components/Card";
 import { EquipoForm } from "../components/EquipoForm";
 import { EquipoTable } from "../components/EquipoTable";
+import { PageHeader } from "../components/PageHeader";
+import { StateMessage } from "../components/StateMessage";
 import * as equiposApi from "../api/equipos";
 import type { Equipo, EquipoInput } from "../types/equipo";
 
 export default function Equipamiento() {
-  const [equipos, setEquipos] = useState<Equipo[]>([]);
+  const [equipos, setEquipos] = useState<Equipo[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [equipoAEditar, setEquipoAEditar] = useState<Equipo | null>(null);
   const [errorLista, setErrorLista] = useState<string | null>(null);
@@ -47,20 +50,38 @@ export default function Equipamiento() {
 
   return (
     <div>
-      <h1>Equipamiento</h1>
-      <input
-        placeholder="Buscar por nombre o código..."
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
+      <PageHeader
+        title="Equipamiento"
+        description="Administrá el inventario: dar de alta equipos nuevos, buscar, editar datos, o eliminar los que ya no correspondan."
       />
-      {errorLista && <p role="alert">{errorLista}</p>}
-      {errorAccion && <p role="alert">{errorAccion}</p>}
-      <EquipoTable equipos={equipos} onEditar={setEquipoAEditar} onEliminar={handleEliminar} />
-      <EquipoForm
-        equipoAEditar={equipoAEditar}
-        onSubmit={handleSubmit}
-        onCancelar={() => setEquipoAEditar(null)}
-      />
+
+      <Card>
+        <div className="field-row">
+          <label className="field">
+            Buscar
+            <input
+              placeholder="Por nombre o código..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </label>
+        </div>
+        {errorLista && <StateMessage tono="error">{errorLista}</StateMessage>}
+        {errorAccion && <StateMessage tono="error">{errorAccion}</StateMessage>}
+        {equipos === null && !errorLista ? (
+          <StateMessage tono="loading">Cargando equipos…</StateMessage>
+        ) : (
+          <EquipoTable equipos={equipos ?? []} onEditar={setEquipoAEditar} onEliminar={handleEliminar} />
+        )}
+      </Card>
+
+      <Card>
+        <EquipoForm
+          equipoAEditar={equipoAEditar}
+          onSubmit={handleSubmit}
+          onCancelar={() => setEquipoAEditar(null)}
+        />
+      </Card>
     </div>
   );
 }

@@ -435,3 +435,31 @@ clonar ni compilar nada del backend ni del frontend (`migrate` es la única exce
 Con esto se cierra el **TP2** completo: app elegida y contenerizada, Dockerfiles multi-stage para
 back y front, Compose con persistencia demostrada, e imágenes públicas verificadas con un `pull` sin
 credenciales.
+
+## Mejora visual del frontend (fuera de fase, previa al TP3)
+
+Antes de arrancar el TP3, se rehizo la presentación visual de las tres pantallas sin tocar lógica de
+negocio, endpoints ni tipos: cero cambios en `api/`, `types/` ni en el backend (verificado con
+`git diff --stat`).
+
+**Qué se agregó:**
+- Un sistema de diseño en `index.css` (variables de color con paleta azul/celeste + verde-ámbar-rojo
+  para estados semánticos, espaciado, radios y sombras consistentes, con soporte de modo oscuro vía
+  `prefers-color-scheme`).
+- Cuatro componentes compartidos nuevos, para no duplicar CSS ni markup entre pantallas:
+  `PageHeader` (título + descripción), `Card` (contenedor con sombra/borde), `StatusBadge` (estado de
+  Equipo/Préstamo con color consistente) y `StateMessage` (carga/vacío/error, mismo estilo en las
+  tres pantallas).
+- `StatTile` ahora acepta un color de acento por métrica (verde=disponibles, celeste=prestados,
+  rojo=vencidos, ámbar=próximos a vencer), reforzando visualmente el significado de cada número.
+- Encabezado con identidad de marca (isotipo "CG", nombre y tagline) en vez de una barra de nav
+  desnuda.
+
+**Qué NO se tocó:** ningún cálculo (el `vencido` sigue viniendo del backend, no se recalcula en el
+front), ninguna regla de validación, ninguna dependencia nueva (todo con CSS plano, sin librería de
+UI ni de íconos).
+
+Verificado en un navegador real: las tres pantallas con datos reales, los badges de estado
+(Disponible/Prestado/Activo/Vencido/Devuelto), y el layout responsive en viewport móvil (grilla de
+métricas a dos columnas, formularios apilados, tabla con scroll horizontal propio sin romper el
+layout de la página).
