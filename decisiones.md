@@ -88,3 +88,20 @@ hay todavía una versión estable de Prisma que la corrija — la única más nu
 release candidate (`8.0.0-rc.12`), y no se adopta un release candidate en un proyecto que hay que
 mantener y defender todo el semestre. Queda como riesgo conocido, aceptado y no bloqueante, a
 revisar cuando Prisma publique una versión estable que la resuelva.
+
+## Persistencia
+
+Para desarrollo local (todavía sin Docker Compose, eso es el TP2) PostgreSQL corre como un
+contenedor suelto (`docker run postgres:16-alpine ...`, publicado en el puerto 5432 del host), no
+instalado en la máquina. `DATABASE_URL` en `backend/.env` apunta a `localhost:5432` porque el
+backend en esta fase corre directo con Node, no dentro de otro contenedor — cuando el backend mismo
+se contenerice (TP2), esa misma variable va a apuntar al nombre del servicio (`db`), no a
+`localhost`.
+
+`backend/src/lib/prisma.ts` es la única instancia de `PrismaClient` de todo el proyecto: ningún
+controller ni route importa Prisma directo, solo los services (a partir de la Fase 5) importan
+`prisma` desde ese archivo. Se verificó a mano (con un script descartable, no versionado) que:
+persistir y leer los tres modelos funciona correctamente, y que la restricción `ON DELETE RESTRICT`
+de las claves foráneas efectivamente impide borrar un `Equipo` con préstamos asociados (lanza
+`PrismaClientKnownRequestError`) — la primera de las reglas de negocio del enunciado, resuelta a
+nivel de base de datos en vez de en código.
