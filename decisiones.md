@@ -401,3 +401,37 @@ de error, en vez de dejar arrancar un backend contra una base sin tablas).
 - **Prueba de persistencia:** con un equipo cargado, `docker compose down` seguido de
   `docker compose up -d` conserva el dato (el volumen `db_data` sobrevive); `docker compose down -v`
   seguido de `up` lo borra y `migrate` vuelve a crear el schema desde cero sobre el volumen nuevo.
+
+## TP2 — Registry y cierre
+
+**Imágenes base elegidas:** `postgres:16-alpine` (la que pide el enunciado), `node:22-alpine` para
+build y runtime del backend (misma base en las dos etapas, ver Fase 14), `nginx:alpine` para servir
+el frontend — las tres son variantes Alpine, elegidas por tamaño sobre las variantes Debian
+default de cada imagen, sin ninguna necesidad de librerías de sistema que Alpine no traiga.
+
+**Qué persiste y qué no:** solo los datos de PostgreSQL, en el volumen nombrado `db_data`. Todo lo
+demás (el código de las imágenes, los `node_modules`, los estáticos del build de React) es
+descartable y se reconstruye desde el Dockerfile o se descarga del registry en cada `up` — nunca se
+guarda estado de aplicación fuera de la base de datos.
+
+**Problema encontrado al publicar:** el primer intento de `docker push` del backend se cortó a mitad
+de camino con `proxyconnect tcp: dial tcp 192.168.65.1:3128: i/o timeout` (un timeout transitorio de
+red, no un error de configuración) — todas las capas ya se habían subido, pero el `push` nunca llegó
+a confirmar el manifiesto final. Se solucionó reintentando el mismo comando: Docker no vuelve a subir
+las capas que el registry ya tiene, así que el reintento fue casi instantáneo.
+
+**Arquitectura de la imagen:** construida en una Mac con procesador Intel (`x86_64`/`amd64`,
+confirmado con `docker image inspect ... --format '{{.Architecture}}'`), que coincide con la
+arquitectura típica de los runners de GitHub Actions — no se anticipa el problema de manifiesto
+multi-arquitectura que menciona la guía para Macs con chip Apple Silicon, pero se deja anotado por si
+el entorno de build cambia en el TP7.
+
+**Por qué se publican las imágenes si compose ya sabe construirlas:** para desacoplar "tener el
+código" de "poder correr el sistema" — cualquier persona (la cátedra, un compañero, un pipeline de
+CI en el TP7) puede levantar CampusGear con solo `docker-compose.registry.yml` y el `.env`, sin
+clonar ni compilar nada del backend ni del frontend (`migrate` es la única excepción deliberada, ver
+`docker-compose.registry.yml`).
+
+Con esto se cierra el **TP2** completo: app elegida y contenerizada, Dockerfiles multi-stage para
+back y front, Compose con persistencia demostrada, e imágenes públicas verificadas con un `pull` sin
+credenciales.
