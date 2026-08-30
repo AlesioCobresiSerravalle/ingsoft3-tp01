@@ -341,3 +341,27 @@ idéntica en ambas etapas):
 
 Verificado en contenedor: `GET /health` responde `200`, y un `POST /api/equipos` real contra el
 Postgres del host (vía `host.docker.internal`, no `localhost`) persiste y se puede leer después.
+
+## TP2 — Dockerfile del frontend + nginx
+
+Multi-stage: `node:22-alpine` compila (`npm run build`, que corre `tsc -b && vite build`), y la
+etapa final es `nginx:alpine` sirviendo solo `dist/` — sin Node adentro en producción, porque una
+SPA ya compilada es HTML/CSS/JS estático, no necesita runtime de JavaScript del lado del servidor.
+
+El `nginx.conf` sigue el patrón de la guía: el nombre del backend (`http://backend:3000`) va en una
+variable (`set $backend_api ...`) resuelta en runtime con `resolver 127.0.0.11`, en vez de escrito
+directo en `proxy_pass`. Se verificó el motivo concreto: en esta fase el contenedor del frontend se
+corre **solo**, sin el backend — si el nombre estuviera escrito directo, nginx fallaría al arrancar
+con `host not found in upstream`; con la variable, arranca igual y solo falla la request puntual
+cuando llega (`502 Bad Gateway`, verificado con la pestaña de red del navegador).
+
+**Se aprovechó para verificar un detalle adicional del frontend:** ante ese `502`, `apiFetch`
+(Fase 9) no rompe — nginx devuelve una página de error HTML, no JSON, así que el `.json().catch(()
+=> null)` de `apiFetch` cae al mensaje de respaldo `Error 502` en vez de tirar una excepción de
+parseo sin manejar. El Dashboard mostró ese mensaje correctamente en vez de quedarse colgado o
+crashear — el manejo de errores diseñado desde la Fase 9 resiste incluso una respuesta de error que
+no es JSON, un caso que no se había probado explícitamente hasta ahora.
+
+Checkpoint esperado de esta fase, tal como lo describe la guía: la interfaz se sirve
+correctamente en `localhost` con nginx, aunque todavía no puede hablar con el backend — son dos
+contenedores sueltos. Eso se resuelve recién en la Fase 16 (Compose), donde ambos comparten red.
