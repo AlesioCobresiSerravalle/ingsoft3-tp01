@@ -1,5 +1,6 @@
 import express from "express";
 import { healthRouter } from "./routes/health.routes";
+import { equiposRouter } from "./routes/equipos.routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFoundError } from "./errors/AppError";
 
@@ -11,6 +12,7 @@ export const app = express();
 app.use(express.json());
 
 app.use("/health", healthRouter);
+app.use("/api/equipos", equiposRouter);
 
 // Cualquier ruta no reconocida cae acá.
 app.use((_req, _res, next) => {
