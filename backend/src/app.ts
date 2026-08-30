@@ -2,6 +2,7 @@ import express from "express";
 import { healthRouter } from "./routes/health.routes";
 import { equiposRouter } from "./routes/equipos.routes";
 import { personasRouter } from "./routes/personas.routes";
+import { prestamosRouter } from "./routes/prestamos.routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFoundError } from "./errors/AppError";
 
@@ -15,6 +16,7 @@ app.use(express.json());
 app.use("/health", healthRouter);
 app.use("/api/equipos", equiposRouter);
 app.use("/api/personas", personasRouter);
+app.use("/api/prestamos", prestamosRouter);
 
 // Cualquier ruta no reconocida cae acá.
 app.use((_req, _res, next) => {
