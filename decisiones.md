@@ -307,3 +307,37 @@ encontrado y corregido en las Fases 3 y 11 respectivamente.
   a lo largo de 12 fases, no se adoptó un proyecto ajeno.
 - *Tamaño:* tres entidades, tres pantallas, seis reglas de negocio — el CRUD + 2-3 pantallas que
   pide la guía, sin agregar alcance que no sume nota.
+
+## TP2 — Dockerfile del backend
+
+Multi-stage con `node:22-alpine` en **las dos** etapas (a diferencia del ejemplo de la guía, que usa
+una imagen de SDK pesada para build y una de runtime liviana para producción): en el ecosistema
+Node no existe una imagen "SDK" separada como `mcr.microsoft.com/dotnet/sdk`, así que la diferencia
+entre etapas la marcan las dependencias instaladas (`npm ci` completo vs. `npm ci --omit=dev`), no
+la imagen base.
+
+**Un hallazgo real que costó tiempo diagnosticar:** la primera versión de la etapa final hacía
+`npx prisma generate` directamente ahí (para evitar copiar binarios entre etapas). Como el CLI
+`prisma` es una devDependency correctamente excluida por `--omit=dev`, `npx` lo descargaba solo al
+no encontrarlo — arrastrando el CLI completo (~200MB, incluyendo `typescript` y `effect`) a la
+imagen de producción. La imagen resultante pesaba **610MB**.
+
+Al corregirlo (generar el cliente **una sola vez** en la etapa de build y copiar el resultado, ya
+que las dos etapas comparten la misma base y el motor generado es compatible) apareció un segundo
+problema, más sutil: `@prisma/client` declara `prisma` como **peer dependency opcional**, y npm lo
+auto-instala en la etapa final igual, así no se lo invoque directamente — ni `--omit=dev` ni
+`--omit=peer` por separado lo excluyen; hace falta **`--omit=dev --omit=peer --omit=optional`**
+juntos. Con eso, `node_modules/prisma`, `typescript`, `effect` y `fast-check` (~150MB en total)
+desaparecen de la imagen final, y de paso se resuelve la vulnerabilidad de `npm audit` que se venía
+arrastrando como riesgo aceptado desde la Fase 2 (era transitiva del propio CLI de Prisma).
+
+**Comparación de tamaños** (con `node_modules` como diferencia principal, ya que la base es
+idéntica en ambas etapas):
+
+| Imagen | Tamaño |
+|---|---|
+| Etapa de build (con `prisma`, `typescript` y el resto de las devDependencies) | 631MB |
+| Etapa final (solo dependencias de producción) | 298MB |
+
+Verificado en contenedor: `GET /health` responde `200`, y un `POST /api/equipos` real contra el
+Postgres del host (vía `host.docker.internal`, no `localhost`) persiste y se puede leer después.
