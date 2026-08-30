@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: campusgear
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  # A diferencia de backend/frontend, este servicio sigue construyendo desde
+  # el código fuente incluso acá: el TP2 solo pide publicar las imágenes de
+  # back y front, y publicar una tercera imagen solo para las migraciones
+  # sería alcance que nadie pidió. Correr este compose sigue necesitando el
+  # repo clonado (para este servicio puntual), no solo las imágenes.
+  migrate:
+    build:
+      context: ./backend
+      target: build
+    environment:
+      DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/campusgear?schema=public"
+    entrypoint: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    image: ghcr.io/alesiocobresiserravalle/campusgear-backend:v0.1.0 # antes: build: ./backend
+    environment:
+      DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/campusgear?schema=public"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    image: ghcr.io/alesiocobresiserravalle/campusgear-frontend:v0.1.0 # antes: build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
