@@ -13,3 +13,15 @@ export class NotFoundError extends AppError {
     super(404, message);
   }
 }
+
+export class BadRequestError extends AppError {
+  constructor(message = "Solicitud inválida") {
+    super(400, message);
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message = "Conflicto con el estado actual del recurso") {
+    super(409, message);
+  }
+}

@@ -105,3 +105,26 @@ persistir y leer los tres modelos funciona correctamente, y que la restricción 
 de las claves foráneas efectivamente impide borrar un `Equipo` con préstamos asociados (lanza
 `PrismaClientKnownRequestError`) — la primera de las reglas de negocio del enunciado, resuelta a
 nivel de base de datos en vez de en código.
+
+## API de Equipos
+
+El CRUD de `Equipo` sigue la separación de capas definida: `routes` (mapea verbos HTTP),
+`controllers` (parsea/responde HTTP, sin lógica), `services` (reglas y acceso a Prisma), `schemas`
+(Zod). El `estado` derivado (ver sección "Modelo de datos") se calcula en un único punto del
+service (`conEstadoDerivado`), a partir de si el equipo tiene o no un préstamo con
+`fechaDevolucionReal = null` — nunca se guarda ni se recalcula en otro lugar.
+
+**Traducción de errores de Prisma a HTTP:** dos códigos de error de Prisma se traducen a respuestas
+significativas en vez de dejar pasar un `500` genérico: `P2002` (violación de restricción única,
+acá el `codigo` repetido) se traduce a `409 Conflict`, y `P2003` (violación de clave foránea, acá un
+`Equipo` con préstamos asociados) también a `409`. Ambos se probaron de verdad por HTTP: el código
+duplicado devuelve `409` en el alta, y el borrado de un equipo con un préstamo activo (insertado
+directo con Prisma, ya que el endpoint de Préstamos es de la Fase 7) también devuelve `409` — la
+regla de negocio 1 del enunciado ("un equipo prestado no puede eliminarse sin más") ya queda
+validada de punta a punta antes de tiempo.
+
+**Un detalle de tipos de Express 5:** `@types/express` 5.x tipa `req.params` como
+`{ [key: string]: string | string[] }` (para soportar rutas con parámetros repetidos, que esta app
+no usa), así que ni siquiera una ruta simple como `/:id` tipa `req.params.id` como `string` a secas.
+Se resolvió tipando cada handler explícitamente como `Request<{ id: string }>` en vez de `Request`
+genérico — más preciso, y evita tener que castear el valor a mano en cada controller.
