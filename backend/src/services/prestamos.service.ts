@@ -7,8 +7,9 @@ type FiltroEstado = "activo" | "devuelto" | "vencido";
 
 // Único lugar de todo el backend donde se calcula "vencido" (ver
 // decisiones.md, sección "Modelo de datos"): nunca se persiste, siempre se
-// deriva comparando contra el reloj en el momento de leer.
-function estaVencido(prestamo: Pick<Prestamo, "estado" | "fechaDevolucionPrevista">) {
+// deriva comparando contra el reloj en el momento de leer. Se exporta para
+// que dashboard.service.ts la reutilice en vez de duplicarla.
+export function estaVencido(prestamo: Pick<Prestamo, "estado" | "fechaDevolucionPrevista">) {
   return prestamo.estado === "ACTIVO" && prestamo.fechaDevolucionPrevista < new Date();
 }
 

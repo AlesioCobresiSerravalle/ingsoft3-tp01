@@ -169,3 +169,18 @@ primera.
 — es exactamente lo diseñado (`onDelete: Restrict` no distingue préstamos activos de históricos,
 adrede: son historial). La limpieza de la base de desarrollo se hizo con un script directo de
 Prisma, no por la API — que es, otra vez, el comportamiento correcto.
+
+## API Dashboard
+
+`dashboard.service.ts` **no reimplementa** el cálculo de "vencido": importa y reutiliza
+`estaVencido` desde `prestamos.service.ts` (exportada para eso). Es el mismo principio que evitó
+duplicar la lógica de estado de `Equipo`: un solo lugar decide qué es "vencido" en todo el backend,
+y tanto el listado de préstamos como el resumen del dashboard lo consultan ahí.
+
+Se armó un escenario de prueba con 5 equipos (uno disponible, tres prestados —uno al día, uno
+vencido, uno próximo a vencer— y uno con un préstamo ya devuelto) y `GET /api/dashboard/resumen`
+devolvió exactamente `{ totalEquipos: 5, disponibles: 2, prestados: 3, vencidos: 1,
+proximosAVencer: 1 }`, coincidiendo con lo esperado en cada categoría.
+
+La ventana de "próximo a vencer" (3 días) es una constante local, no un requisito del enunciado con
+un valor fijo — se documenta acá para poder justificarla y ajustarla si hace falta.
