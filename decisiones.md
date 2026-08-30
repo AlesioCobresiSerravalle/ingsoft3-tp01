@@ -365,3 +365,39 @@ no es JSON, un caso que no se había probado explícitamente hasta ahora.
 Checkpoint esperado de esta fase, tal como lo describe la guía: la interfaz se sirve
 correctamente en `localhost` con nginx, aunque todavía no puede hablar con el backend — son dos
 contenedores sueltos. Eso se resuelve recién en la Fase 16 (Compose), donde ambos comparten red.
+
+## TP2 — Docker Compose
+
+Cuatro servicios: `db` (Postgres, sin publicar puerto — nadie fuera de la red interna necesita
+pegarle directo), `migrate`, `backend` (publica `3000` para poder pegarle con `curl`/Postman
+directo, además de a través del frontend) y `frontend` (publica `8080`, la puerta de entrada real).
+
+**El servicio `migrate`, y por qué existe.** El Postgres del compose nace con la base `campusgear`
+vacía, sin tablas — hace falta aplicar la migración de Prisma antes de que el backend pueda
+responder una sola consulta real. Pero en la Fase 14 se sacó deliberadamente el CLI de Prisma de la
+imagen final del backend (pesa ~150MB de más). Meterlo de nuevo ahí solo para poder correr
+`prisma migrate deploy` una vez por arranque hubiera deshecho esa optimización.
+
+La solución: `migrate` es un servicio de un solo uso que reconstruye con
+`build.target: build` — apuntando explícitamente a la etapa de build del **mismo** `Dockerfile`
+del backend (la que sí instala el CLI completo), sobreescribe el `ENTRYPOINT` con
+`["npx", "prisma", "migrate", "deploy"]`, corre, y termina. `backend` no arranca hasta que `migrate`
+termine con éxito (`depends_on: migrate: condition: service_completed_successfully`), y a su vez
+`migrate` espera a que `db` esté sana. La imagen que sirve tráfico de verdad nunca ve el CLI de
+Prisma.
+
+**`depends_on` con `service_healthy` vs. `service_completed_successfully`:** son dos condiciones
+distintas y no intercambiables. Un servicio de larga vida (como `db`) se espera con
+`service_healthy` (su `healthcheck` nunca dice "terminé", dice "estoy listo ahora mismo"); un
+servicio de un solo uso que corre y sale (como `migrate`) se espera con
+`service_completed_successfully` (que además falla el `up` entero si `migrate` termina con código
+de error, en vez de dejar arrancar un backend contra una base sin tablas).
+
+**Validaciones realizadas de punta a punta:**
+- `docker compose up -d --build` levantó los cuatro servicios en el orden correcto (visible en el
+  log: `db` sana → `migrate` corre y termina → `backend` y `frontend` arrancan).
+- El sistema completo funciona a través del puerto publicado del frontend (`localhost:8080`),
+  probado tanto por `curl` como navegando y creando un equipo real desde la UI.
+- **Prueba de persistencia:** con un equipo cargado, `docker compose down` seguido de
+  `docker compose up -d` conserva el dato (el volumen `db_data` sobrevive); `docker compose down -v`
+  seguido de `up` lo borra y `migrate` vuelve a crear el schema desde cero sobre el volumen nuevo.
