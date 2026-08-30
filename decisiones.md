@@ -261,3 +261,15 @@ Se probó el ciclo completo en un navegador real:
 No se implementó ningún manejo de estado global ni cache entre pantallas (cada pantalla vuelve a
 pedir sus datos al navegar): para el tamaño de esta app alcanza, y agregarlo ahora sería
 sobre-ingeniería.
+
+## Frontend: Dashboard
+
+Reemplaza el placeholder de conectividad de la Fase 9 por el contenido real: cinco tarjetas
+(`StatTile`) con los números de `GET /api/dashboard/resumen`. Se armó el mismo escenario de prueba
+de 5 equipos de la Fase 8 (uno disponible, tres prestados —al día, vencido, próximo a vencer— y uno
+devuelto) y el Dashboard del frontend mostró exactamente `5 / 2 / 3 / 1 / 1`, coincidiendo con lo
+verificado por API en esa fase — misma fuente de datos, dos maneras de comprobarlo.
+
+Con esto queda completo el MVP de las tres pantallas (Dashboard, Equipamiento, Préstamos) definidas
+en el diseño de la interfaz, funcionando de punta a punta contra el backend real. Lo que sigue
+(Fases 13 en adelante) ya no agrega pantallas nuevas: es integración, Docker y CI.
