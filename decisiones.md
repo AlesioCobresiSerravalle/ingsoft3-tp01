@@ -463,3 +463,73 @@ Verificado en un navegador real: las tres pantallas con datos reales, los badges
 (Disponible/Prestado/Activo/Vencido/Devuelto), y el layout responsive en viewport móvil (grilla de
 métricas a dos columnas, formularios apilados, tabla con scroll horizontal propio sin romper el
 layout de la página).
+
+# TP3 — Planificación y trazabilidad
+
+## Duración del sprint
+
+Se eligió **2 semanas** para el Sprint 1. Es el punto de partida más común en Scrum (ni tan corto
+como para no poder terminar una historia con sus tareas, ni tan largo como para perder feedback
+frecuente), y alcanza cómodamente para la historia de este TP (2 tareas). Se puede acortar más
+adelante si el ritmo de los TPs de la cátedra lo pide, pero no hay motivo para arrancar más
+agresivo que esto sin datos todavía de cuánto tarda el equipo (acá, una sola persona) en cerrar una
+historia.
+
+## Límite de trabajo en progreso
+
+Se configuró en **2** en la columna *In Progress* del tablero. Sigue la regla de arranque sugerida
+por la guía: *cantidad de personas + 1*. Trabajando solo, eso da `1 + 1 = 2`. El "+1" es la válvula
+para cuando algo queda esperando (una revisión, una respuesta) y hace falta poder avanzar en otra
+cosa sin quedarse completamente trabado — pero sin que el límite deje de limitar nada. Señal para
+bajarlo: si nunca se llega a 2, sobra margen. Señal para subirlo: si se llega a 2 todo el tiempo y
+genuinamente hace falta más paralelismo.
+
+## Diagnóstico de la historia mal escrita
+
+`"Como desarrollador quiero crear la tabla usuarios"` está mal escrita por dos motivos, no uno:
+
+1. **Es una tarea disfrazada de historia.** "Crear una tabla" es trabajo técnico interno, invisible
+   para cualquier persona fuera del equipo de desarrollo — nadie fuera del equipo "quiere" una
+   tabla, quiere la capacidad que esa tabla hace posible (por ejemplo, que el sistema no pierda el
+   historial de préstamos si el servidor se reinicia).
+2. **Le falta el beneficio** (la cláusula "para..."): sin él, no hay forma de juzgar si vale la pena
+   ni de priorizarla frente a otra cosa.
+
+Reescrita como historia de verdad: *"Como responsable del laboratorio quiero que los préstamos
+queden guardados de forma persistente para no perder el historial si el servidor se reinicia."* La
+tabla en sí pasa a ser una **tarea** dentro de esa historia (exactamente el nivel donde ya vive en
+este proyecto: la migración de Prisma de la Fase 4).
+
+## Problemas encontrados y cómo los resolví
+
+- **`gh` no estaba instalado** (se había optado por hacer todo el TP1 por la web). Para este TP, con
+  la cantidad de objetos a crear (labels, issues, sub-issues, proyecto), se instaló con Homebrew —
+  reduce drásticamente el margen de error frente a hacerlo todo a mano por la web.
+- **El primer `gh auth login` no dejó nada guardado**: `~/.config/gh/` ni siquiera existía después de
+  que se reportó como completado. Se detectó verificando el archivo directamente (no asumiendo que
+  "listo" significaba autenticado) y se resolvió reintentando el login hasta que `gh auth status`
+  confirmó la sesión de verdad.
+- **El token inicial no tenía el scope `project`**: los primeros `gh project` comandos hubieran
+  fallado. Se resolvió con `gh auth refresh --hostname github.com -s project`, que abre un flujo de
+  device code (un código de 8 caracteres que hay que confirmar en el navegador) — distinto del login
+  inicial, y hay que saber pedirlo explícitamente.
+- **`gh project field-create` no soporta el tipo `ITERATION`** (solo `TEXT`, `SINGLE_SELECT`, `DATE`,
+  `NUMBER`): el campo Sprint se creó a mano desde la web. Es una limitación real de la CLI, no un
+  error de uso — quedó confirmado con el mensaje de error del propio comando.
+- **`gh project create` no deja configurado el *Auto-add to project***: los 5 issues, creados antes
+  de que existiera el proyecto, no aparecieron solos — se agregaron a mano con
+  `gh project item-add` para cada uno.
+- **La historia y las tareas no aparecían en la vista de tabla**: al ser sub-issues de la épica,
+  GitHub las anida colapsadas bajo la fila del padre. Hubo que expandir la fila de la épica (y
+  después la de la historia) para encontrarlas y poder asignarles el Sprint.
+
+## Declaración de uso de IA
+
+Usé Claude como asistente para diseñar los comandos de `gh` (labels, issues, sub-issues, proyecto,
+visibilidad, asignación de items), diagnosticar los problemas de autenticación y scopes, y guiar los
+pasos que solo se pueden hacer desde la web (vista de tablero, campo Iteration, límite de WIP,
+verificación de la automatización). Verificación: cada comando se corrió de verdad contra mi cuenta
+de GitHub — no se simuló nada — y el estado final (jerarquía, sprint asignado a historia y tareas
+pero no a la épica ni al bug, la tarea `#24` cerrada automáticamente por el PR) se confirmó
+consultando la API real con `gh project item-list --format json`, comparando el resultado contra lo
+esperado en vez de asumirlo.
