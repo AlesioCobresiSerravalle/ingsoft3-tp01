@@ -597,3 +597,11 @@ con el `PUT`. Verificación: cada corrida de CI mencionada acá es una corrida r
 pestaña *Actions* del repo, con sus tiempos exactos), y los tres estados de mergeabilidad
 (`BLOCKED`/`CLEAN`/`BEHIND`) se confirmaron contra la API real de GitHub, no se dieron por
 supuestos.
+
+# Ajuste posterior — mostrar la fecha real de devolución
+
+La tabla de Préstamos mostraba "Prestado el" y "Devolución prevista", pero no la fecha en que un
+préstamo **efectivamente** se devolvió (`fechaDevolucionReal`) — un dato que el backend siempre
+guardó y devolvió desde la Fase 7, pero que la UI nunca llegó a mostrar. Se agregó la columna
+"Devuelto el" a `PrestamoTable.tsx` (vacía, con un guion, mientras el préstamo sigue activo). No
+cambia nada de tipos ni de API: el dato ya viaja en cada respuesta, solo faltaba renderizarlo.
