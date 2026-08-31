@@ -533,3 +533,67 @@ de GitHub — no se simuló nada — y el estado final (jerarquía, sprint asign
 pero no a la épica ni al bug, la tarea `#24` cerrada automáticamente por el PR) se confirmó
 consultando la API real con `gh project item-list --format json`, comparando el resultado contra lo
 esperado en vez de asumirlo.
+
+# TP4 — Continuous Integration
+
+## Estructura del pipeline
+
+Dos jobs, `build-backend` y `build-frontend`, en paralelo (cada uno en su propio runner, sin
+depender uno del otro): reflejan la separación real del proyecto (dos imágenes independientes,
+Fase 14 y 15 del TP2), y correr en paralelo reduce el tiempo total del pipeline a lo que tarda el
+más lento de los dos, no a la suma de ambos. Dispara en `pull_request` (la corrida que realmente
+importa: verifica el cambio propuesto antes de integrarlo) y en `push` a `main` (deja el estado del
+badge y, sobre todo, deja el cache de capas disponible para que el primer PR que llegue después ya
+lo aproveche).
+
+## Qué cachea el pipeline
+
+Se cachean las **capas de las imágenes de Docker** (`type=gha`, un `scope` distinto por job para que
+no se pisen entre sí — ver el riesgo documentado en la Fase 19 de la planificación). Verificado con
+dos corridas seguidas del mismo PR:
+
+| | 1ª corrida (sin cache) | 2ª corrida (con cache) |
+|---|---|---|
+| `build-backend` | 1m18s | 25s |
+| `build-frontend` | 55s | 20s |
+
+El log de la segunda corrida muestra explícitamente `CACHED` en la mayoría de las capas de ambos
+jobs. Qué pasa si el cache desaparece (la plataforma lo puede desalojar en cualquier momento, no es
+una garantía): el pipeline construye todo de cero, más lento, pero **funciona igual** — no hay
+ninguna dependencia oculta en el cache, es puramente una optimización de velocidad.
+
+## Por qué el pipeline construye con el Dockerfile en vez de compilar por su cuenta
+
+Si el workflow corriera `npm run build` directo (con Node instalado en el runner en vez de usar
+`docker build`), habría **dos definiciones de build**: la que usa el pipeline para verificar, y la
+que usan los Dockerfiles para lo que realmente se despliega — y tarde o temprano divergen (una
+versión de Node distinta, una dependencia que falta en un lado y no en el otro). Usando
+`docker/build-push-action` sobre `./backend` y `./frontend`, el pipeline verifica **exactamente** lo
+mismo que corre en producción, con una sola fuente de verdad.
+
+## Problemas encontrados y cómo los resolví
+
+- **La primera corrida sobre el PR de la demo (`feature/demo-gate`) tenía que partir de un `main` ya
+  actualizado con el `ci.yml` real** (no el esqueleto del TP3) — se mergeó primero el PR del pipeline
+  (`#29`) y recién después se abrió la rama de la demo, siguiendo exactamente la advertencia de la
+  guía: si se hace al revés, la demo corre contra el workflow viejo (solo `checkout`) y da verde
+  sobre código que no compila, sin que nada de esto tenga sentido.
+- **El diff del PR de la demo (`#30`) quedó vacío.** Al agregar y después sacar exactamente las
+  mismas dos líneas, el archivo final es idéntico al de `main` — el diff neto no muestra nada. No es
+  un error: el valor de ese PR está en su **historial de commits** (la rotura y el fix, cada uno con
+  su corrida de CI), no en el estado final del archivo.
+- **Verificar el bloqueo del gate no alcanza con mirar el color del check.** Se confirmó con la
+  propia API de GitHub (`gh pr view --json mergeable,mergeStateStatus`): `BLOCKED` mientras
+  `build-backend` estaba en rojo, `CLEAN` después del fix, y `BEHIND` en el segundo PR una vez que
+  `main` avanzó — los tres estados que demuestra la secuencia completa del TP4, verificados por
+  comando y no solo por inspección visual.
+
+## Declaración de uso de IA
+
+Usé Claude para diseñar el `ci.yml` (los dos jobs, el cache con `scope`, los triggers), para armar la
+secuencia completa de la demo (romper, verificar en local antes de subir, arreglar, y el segundo PR
+para mostrar `strict: true`), y para diagnosticar el JSON de branch protection antes de sobreescribirlo
+con el `PUT`. Verificación: cada corrida de CI mencionada acá es una corrida real (se puede ver en la
+pestaña *Actions* del repo, con sus tiempos exactos), y los tres estados de mergeabilidad
+(`BLOCKED`/`CLEAN`/`BEHIND`) se confirmaron contra la API real de GitHub, no se dieron por
+supuestos.
