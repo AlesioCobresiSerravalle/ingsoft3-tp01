@@ -70,3 +70,4 @@ docker compose logs -f     # sigue los logs de todos los servicios
 
 - [`decisiones.md`](decisiones.md): decisiones de diseño y arquitectura, TP por TP.
 - [`evidencias.md`](evidencias.md): capturas y evidencias pedidas por cada TP.
+
