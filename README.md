@@ -1,5 +1,7 @@
 # CampusGear
 
+[![CI](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/workflows/ci.yml/badge.svg)](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/workflows/ci.yml)
+
 Aplicación web para administrar el préstamo de equipamiento de un laboratorio o institución
 educativa: qué equipos existen, cuáles están disponibles o prestados, quién tiene cada uno, cuándo
 vence la devolución y cuáles están vencidos.
