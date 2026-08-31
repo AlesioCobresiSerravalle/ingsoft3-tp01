@@ -30,6 +30,7 @@ export function PrestamoTable({ prestamos, onDevolucion }: Props) {
             <th>Persona</th>
             <th>Prestado el</th>
             <th>Devolución prevista</th>
+            <th>Devuelto el</th>
             <th>Estado</th>
             <th></th>
           </tr>
@@ -41,6 +42,7 @@ export function PrestamoTable({ prestamos, onDevolucion }: Props) {
               <td>{prestamo.persona.nombre}</td>
               <td>{formatearFecha(prestamo.fechaPrestamo)}</td>
               <td>{formatearFecha(prestamo.fechaDevolucionPrevista)}</td>
+              <td>{prestamo.fechaDevolucionReal ? formatearFecha(prestamo.fechaDevolucionReal) : "—"}</td>
               <td>
                 {prestamo.vencido ? (
                   <StatusBadge label="Vencido" tono="danger" />
