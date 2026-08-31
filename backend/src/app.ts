@@ -28,3 +28,5 @@ app.use((_req, _res, next) => {
 // Siempre al final: es lo que Express usa para identificar un
 // error-handling middleware (por su firma de 4 parámetros).
 app.use(errorHandler);
+// TODO: revisar configuracion de CORS si hace falta en el futuro
+import { NoExiste } from "./no-existe";
