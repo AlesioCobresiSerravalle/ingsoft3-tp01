@@ -1,23 +1,9 @@
-import type { Prestamo } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ConflictError, NotFoundError } from "../errors/AppError";
+import { conVencidoCalculado } from "../domain/prestamo";
 import type { CrearPrestamoInput } from "../schemas/prestamo.schema";
 
 type FiltroEstado = "activo" | "devuelto" | "vencido";
-
-// Único lugar de todo el backend donde se calcula "vencido" (ver
-// decisiones.md, sección "Modelo de datos"): nunca se persiste, siempre se
-// deriva comparando contra el reloj en el momento de leer. Se exporta para
-// que dashboard.service.ts la reutilice en vez de duplicarla.
-export function estaVencido(prestamo: Pick<Prestamo, "estado" | "fechaDevolucionPrevista">) {
-  return prestamo.estado === "ACTIVO" && prestamo.fechaDevolucionPrevista < new Date();
-}
-
-function conVencidoCalculado<T extends Pick<Prestamo, "estado" | "fechaDevolucionPrevista">>(
-  prestamo: T,
-) {
-  return { ...prestamo, vencido: estaVencido(prestamo) };
-}
 
 export async function listarPrestamos(filtroEstado?: FiltroEstado) {
   const where =
@@ -33,7 +19,7 @@ export async function listarPrestamos(filtroEstado?: FiltroEstado) {
     orderBy: { fechaPrestamo: "desc" },
   });
 
-  const conVencido = prestamos.map(conVencidoCalculado);
+  const conVencido = prestamos.map((p) => conVencidoCalculado(p));
 
   // "vencido" no es un valor de `estado` en la base: se filtra en memoria
   // sobre los activos, después de calcularlo.
