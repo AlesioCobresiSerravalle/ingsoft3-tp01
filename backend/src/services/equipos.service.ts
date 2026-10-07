@@ -1,20 +1,8 @@
-import { Prisma, type Equipo, type Prestamo } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { conEstadoDerivado } from "../domain/equipo";
 import { ConflictError, NotFoundError } from "../errors/AppError";
 import type { ActualizarEquipoInput, CrearEquipoInput } from "../schemas/equipo.schema";
-
-type EquipoConPrestamosActivos = Equipo & { prestamos: Prestamo[] };
-
-// Equipo no tiene columna "estado" (ver decisiones.md): se deriva acá, en el
-// único lugar que arma la respuesta de la API, a partir de si tiene o no un
-// préstamo sin devolución registrada.
-function conEstadoDerivado(equipo: EquipoConPrestamosActivos) {
-  const { prestamos, ...resto } = equipo;
-  return {
-    ...resto,
-    estado: prestamos.length > 0 ? ("PRESTADO" as const) : ("DISPONIBLE" as const),
-  };
-}
 
 const includePrestamosActivos = {
   prestamos: { where: { fechaDevolucionReal: null } },

@@ -605,3 +605,48 @@ préstamo **efectivamente** se devolvió (`fechaDevolucionReal`) — un dato que
 guardó y devolvió desde la Fase 7, pero que la UI nunca llegó a mostrar. Se agregó la columna
 "Devuelto el" a `PrestamoTable.tsx` (vacía, con un guion, mientras el préstamo sigue activo). No
 cambia nada de tipos ni de API: el dato ya viaja en cada respuesta, solo faltaba renderizarlo.
+
+# TP5 — Calidad automatizada (en curso)
+
+## Qué lógica elegí testear y por qué ESA
+
+Lo que duele si se rompe en CampusGear son las reglas de préstamos, no el cableado: *vencido*,
+*próximo a vencer*, el estado derivado del equipo, el resumen del dashboard, la validación de fechas
+y la traducción de errores de la base a HTTP. Todas estaban mezcladas con Prisma o con el reloj
+(`new Date()` adentro), así que **antes de testear hubo que refactorizar** (lo que la guía llama
+«el código testeable se diseña»):
+
+- Se extrajo a `backend/src/domain/` (`prestamo.ts`, `equipo.ts`, `dashboard.ts`): funciones puras,
+  sin Prisma ni Express, con el "ahora" como **parámetro** (default `new Date()`), así el test fija
+  el reloj y no depende de la hora de la corrida.
+- Los *services* ahora delegan en el dominio y sólo hacen lo que es de frontera (hablar con la base).
+- `estaVencido` pasó de `prestamos.service.ts` a `domain/prestamo.ts`: sigue siendo **el único lugar**
+  donde se define "vencido".
+
+El refactor tuvo su propio tropiezo, que cazó el compilador: `prestamos.map(conVencidoCalculado)`
+pasaba el **índice** del `map` como segundo argumento, que ahora es el `ahora: Date` — un clásico de
+JavaScript que `tsc` rechazó antes de llegar a ningún test. Se resolvió con `(p) => conVencidoCalculado(p)`.
+
+## Suite de backend (Vitest): 31 tests en 7 archivos
+
+| Regla | Dónde | Técnicas |
+|---|---|---|
+| 5 · vencido / próximo a vencer | `domain/prestamo.test.ts` | `it.each` con bordes (`<` vs `<=`, ventana de 3 días incluida) |
+| 6 · estado derivado sin duplicar | `domain/equipo.test.ts` | AAA |
+| Dashboard | `domain/dashboard.test.ts` | el escenario 5/2/3/1/1 de la Fase 8, ahora automatizado |
+| 3 · fecha de devolución no anterior | `schemas/prestamo.schema.test.ts` | reloj falso, `it.each`, **caso de error** que verifica el mensaje |
+| 2 · no prestar dos veces | `services/prestamos.service.test.ts` | **mock** de `lib/prisma` con `vi.mock`; verifica la interacción (`toHaveBeenCalledWith`, `not.toHaveBeenCalled`) |
+| Errores de Prisma → HTTP | `services/equipos.service.test.ts`, `middlewares/errorHandler.test.ts` | mock; el 500 **no filtra** el detalle interno |
+
+**Dónde está el mock y por qué `vi.mock` y no inyección por constructor:** la dependencia externa de
+los services es `lib/prisma` (la frontera con la base). En JavaScript el equivalente de «inyectar la
+interfaz» es reemplazar ese módulo; el test le pasa un doble que registra qué se le preguntó. Se
+descartó reescribir los services como clases con constructor: agregaba una capa que el proyecto no
+necesita y obligaba a tocar todos los controllers.
+
+**Verificación de que los tests verifican (mutación manual).** Se rompió a propósito cada una de 7
+reglas y se corrió la suite: `<`→`<=` en vencido, sacar el `ACTIVO` de `estaVencido`, `<=`→`<` en el
+límite de la ventana, `>0`→`>1` en el estado del equipo, no restar los prestados en el dashboard,
+aflojar la validación de fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo
+en rojo** y el código se restauró. Esto no es el pipeline: se corrió en mi máquina, como
+diagnóstico, igual que dice el §2.4.
