@@ -9,6 +9,28 @@ export default defineConfig({
   test: {
     environment: "node", // sin DOM: la lógica probada es pura
     exclude: [...configDefaults.exclude, "e2e/**"], // los specs de Playwright (TP7) no son de vitest
+    coverage: {
+      provider: "v8",
+      // `include` explícito: cuenta también los archivos que ningún test importa.
+      include: ["src/**/*.{ts,tsx}"],
+      // Exclusiones: arranque, tipos y UI de React. La UI no se prueba acá
+      // porque estos tests corren sin DOM; la cubren los e2e de Playwright
+      // (TP7). `api/` y `lib/` (donde vive la lógica) SÍ cuentan.
+      exclude: [
+        "src/**/*.test.ts",
+        "src/main.tsx", // arranque: createRoot
+        "src/App.tsx", // tabla de rutas
+        "src/types/**", // solo tipos, sin código en runtime
+        "src/components/**", // presentación (e2e TP7)
+        "src/pages/**", // composición de componentes (e2e TP7)
+      ],
+      reporter: ["text", "text-summary", "json-summary", "lcov"],
+      reportsDirectory: "coverage",
+      reportOnFailure: true, // el reporte se genera aunque falle un test o el umbral
+      // Umbral anclado en la medición real (líneas 64+, ramas 80+ de piso):
+      // si baja, el proceso sale con código != 0 y rompe el build.
+      thresholds: { lines: 64, branches: 80 },
+    },
   },
   server: {
     proxy: {

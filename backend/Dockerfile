@@ -13,6 +13,18 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+# ---- Etapa de tests (no forma parte de la imagen que se publica) ----
+# Parte de `build`, que ya tiene las devDependencies (vitest) y el código.
+# Los tests van como CMD y no como RUN a propósito: así se ejecutan con
+# `docker run` y el reporte de cobertura se puede sacar del contenedor
+# (volumen) aunque el umbral falle. Con RUN, un build rojo no dejaría
+# ningún reporte para mirar.
+FROM build AS test
+COPY vitest.config.mts ./
+# Los reportes van a /reports (volumen) y sin `clean`: vitest no puede
+# borrar un directorio que es punto de montaje (EBUSY).
+CMD ["npx", "vitest", "run", "--coverage", "--coverage.reportsDirectory=/reports", "--coverage.clean=false"]
+
 # ---- Etapa 2: runtime (imagen mínima, sin herramientas de compilación) ----
 FROM node:22-alpine AS final
 WORKDIR /app

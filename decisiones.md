@@ -680,3 +680,65 @@ rojo), apagar la prioridad del vencido, cambiar el color de Disponible, hardcode
 
 `vite.config.ts` ya excluye `e2e/**` de Vitest, para que los specs de Playwright del TP7 no los
 levante el runner equivocado (la trampa que avisa la guía).
+
+## Cobertura en el pipeline: qué mide, qué excluye y por qué ese umbral
+
+**Dónde corren los tests.** En una etapa `test` de cada Dockerfile (`FROM build AS test`), que hereda
+las devDependencies y el código de la etapa de build. Esa etapa **no entra a la imagen final**: la
+imagen del backend sigue sin `vitest` y la del frontend sigue en ~63 MB. El job la construye con
+`target: test` y la ejecuta con `docker run`; el reporte sale del contenedor por un volumen
+(`/reports`). Los tests van como `CMD` y no como `RUN` a propósito: con `RUN`, un umbral roto
+tumbaría el *build* de la imagen y no quedaría ningún reporte para mirar qué pasó.
+
+**Herramientas por fila del stack** (la guía habla de .NET; se evalúa el logro, no la herramienta):
+
+| Pide la guía | En CampusGear |
+|---|---|
+| xUnit | Vitest 5 |
+| coverlet | `@vitest/coverage-v8` (cobertura nativa de V8) |
+| `fail-under` / umbral | `coverage.thresholds` de Vitest: sale con código ≠ 0 |
+| Resumen del job | `$GITHUB_STEP_SUMMARY` armado con `jq` desde `coverage-summary.json` |
+| Reporte descargable | artefacto `coverage-backend` / `coverage-frontend` (lcov + HTML) |
+
+**Medición real (sin umbral, con `include` explícito para que cuenten también los archivos que ningún
+test importa):**
+
+| | Líneas | Ramas | Funciones |
+|---|---|---|---|
+| Backend (con exclusiones) | 38,21 % | 48,71 % | 40,00 % |
+| Frontend (con exclusiones) | 64,51 % | 80,95 % | 43,75 % |
+
+Sin ninguna exclusión daba 30,92 % (backend) y 12,34 % (frontend) de líneas: el número real no es el
+que sale de excluir lo incómodo, y por eso la lista de abajo es corta y está justificada.
+
+**Qué se excluye y por qué (sólo código sin decisiones propias):**
+
+- Backend: `server.ts` (`app.listen`), `app.ts` (cableado de middlewares), `config/env.ts` (lee
+  `process.env`), `lib/prisma.ts` (instancia el cliente), `routes/**` (tabla ruta → controller).
+- Frontend: `main.tsx` (arranque), `App.tsx` (rutas), `types/**` (sólo tipos: no hay código en
+  runtime), `components/**` y `pages/**` (presentación: estos tests corren sin DOM y la UI queda
+  cubierta por los e2e de Playwright del TP7).
+- **No se excluye**: controllers, services, domain, schemas, middlewares, `api/` ni `lib/`. Los
+  controllers y `validate.ts` hoy están en 0 % y siguen contando; excluirlos habría subido el número
+  sin que el código estuviera más protegido.
+
+**Umbral: líneas ≥ 38 % y ramas ≥ 48 % en el backend; líneas ≥ 64 % y ramas ≥ 80 % en el frontend.**
+Están **anclados en lo medido** (el piso apenas debajo del valor real), no en un número redondo
+elegido de memoria. Un 80 % de mentira con exclusiones mágicas habría sido más vistoso y menos
+honesto. Funciona como trinquete: la cobertura no puede bajar sin que el build se ponga rojo, y
+cuando se agregan tests se sube el piso. Se mide **líneas y ramas** y se reportan ambas; el umbral se
+fija sobre las dos porque las líneas solas esconden los `if` sin su `else` probado.
+
+Comprobación: con el umbral forzado a 90 % el contenedor sale con `exit 1` y dice
+`Coverage for lines (38.21%) does not meet global threshold (90%)`; con el umbral real sale con `0`.
+
+**Problemas que aparecieron al armarlo:**
+
+1. `EBUSY: resource busy or locked, rmdir '/app/coverage'`: Vitest limpia el directorio de reportes
+   antes de correr, y un punto de montaje no se puede borrar. Solución: reportes a `/reports` con
+   `--coverage.clean=false` (en el runner el directorio ya nace vacío).
+2. El backend es CommonJS y un `vitest.config.ts` ESM disparaba una advertencia; se renombró a
+   `vitest.config.mts`.
+3. Mis primeras corridas locales ocultaban el fallo porque encadené `docker build -q` con `&&` y
+   redirigí la salida; la primera señal fue que no aparecía ningún test. Moraleja: verificar el
+   código de salida, no asumir que "no hubo error".
