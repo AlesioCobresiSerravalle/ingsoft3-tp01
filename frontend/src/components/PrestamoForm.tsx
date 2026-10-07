@@ -4,6 +4,7 @@ import * as personasApi from "../api/personas";
 import type { Equipo } from "../types/equipo";
 import type { Persona } from "../types/persona";
 import type { PrestamoInput } from "../types/prestamo";
+import { fechaInputAIso } from "../lib/fechas";
 import { StateMessage } from "./StateMessage";
 
 interface Props {
@@ -62,7 +63,7 @@ export function PrestamoForm({ onSubmit }: Props) {
       await onSubmit({
         equipoId,
         personaId,
-        fechaDevolucionPrevista: new Date(fechaDevolucionPrevista).toISOString(),
+        fechaDevolucionPrevista: fechaInputAIso(fechaDevolucionPrevista),
       });
       setEquipoId("");
       setPersonaId("");
