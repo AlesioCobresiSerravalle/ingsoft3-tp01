@@ -1,4 +1,8 @@
-# Decisiones — TP1
+# Decisiones — CampusGear
+
+Documento único y acumulativo: un bloque por TP (TP1 … TP5).
+
+# TP1 — Fundamentos y API
 
 ## Por qué Git no pudo resolver el conflicto solo
 
@@ -308,7 +312,9 @@ encontrado y corregido en las Fases 3 y 11 respectivamente.
 - *Tamaño:* tres entidades, tres pantallas, seis reglas de negocio — el CRUD + 2-3 pantallas que
   pide la guía, sin agregar alcance que no sume nota.
 
-## TP2 — Dockerfile del backend
+# TP2 — Contenedores
+
+## Dockerfile del backend
 
 Multi-stage con `node:22-alpine` en **las dos** etapas (a diferencia del ejemplo de la guía, que usa
 una imagen de SDK pesada para build y una de runtime liviana para producción): en el ecosistema
@@ -342,7 +348,7 @@ idéntica en ambas etapas):
 Verificado en contenedor: `GET /health` responde `200`, y un `POST /api/equipos` real contra el
 Postgres del host (vía `host.docker.internal`, no `localhost`) persiste y se puede leer después.
 
-## TP2 — Dockerfile del frontend + nginx
+## Dockerfile del frontend + nginx
 
 Multi-stage: `node:22-alpine` compila (`npm run build`, que corre `tsc -b && vite build`), y la
 etapa final es `nginx:alpine` sirviendo solo `dist/` — sin Node adentro en producción, porque una
@@ -366,7 +372,7 @@ Checkpoint esperado de esta fase, tal como lo describe la guía: la interfaz se 
 correctamente en `localhost` con nginx, aunque todavía no puede hablar con el backend — son dos
 contenedores sueltos. Eso se resuelve recién en la Fase 16 (Compose), donde ambos comparten red.
 
-## TP2 — Docker Compose
+## Docker Compose
 
 Cuatro servicios: `db` (Postgres, sin publicar puerto — nadie fuera de la red interna necesita
 pegarle directo), `migrate`, `backend` (publica `3000` para poder pegarle con `curl`/Postman
@@ -402,7 +408,7 @@ de error, en vez de dejar arrancar un backend contra una base sin tablas).
   `docker compose up -d` conserva el dato (el volumen `db_data` sobrevive); `docker compose down -v`
   seguido de `up` lo borra y `migrate` vuelve a crear el schema desde cero sobre el volumen nuevo.
 
-## TP2 — Registry y cierre
+## Registry y cierre
 
 **Imágenes base elegidas:** `postgres:16-alpine` (la que pide el enunciado), `node:22-alpine` para
 build y runtime del backend (misma base en las dos etapas, ver Fase 14), `nginx:alpine` para servir
@@ -436,7 +442,7 @@ Con esto se cierra el **TP2** completo: app elegida y contenerizada, Dockerfiles
 back y front, Compose con persistencia demostrada, e imágenes públicas verificadas con un `pull` sin
 credenciales.
 
-## Mejora visual del frontend (fuera de fase, previa al TP3)
+# Mejora visual del frontend (fuera de fase, previa al TP3)
 
 Antes de arrancar el TP3, se rehizo la presentación visual de las tres pantallas sin tocar lógica de
 negocio, endpoints ni tipos: cero cambios en `api/`, `types/` ni en el backend (verificado con
@@ -606,7 +612,7 @@ guardó y devolvió desde la Fase 7, pero que la UI nunca llegó a mostrar. Se a
 "Devuelto el" a `PrestamoTable.tsx` (vacía, con un guion, mientras el préstamo sigue activo). No
 cambia nada de tipos ni de API: el dato ya viaja en cada respuesta, solo faltaba renderizarlo.
 
-# TP5 — Calidad automatizada (en curso)
+# TP5 — Calidad automatizada
 
 ## Qué lógica elegí testear y por qué ESA
 
@@ -627,7 +633,7 @@ El refactor tuvo su propio tropiezo, que cazó el compilador: `prestamos.map(con
 pasaba el **índice** del `map` como segundo argumento, que ahora es el `ahora: Date` — un clásico de
 JavaScript que `tsc` rechazó antes de llegar a ningún test. Se resolvió con `(p) => conVencidoCalculado(p)`.
 
-## Suite de backend (Vitest): 31 tests en 7 archivos
+## Suite de backend (Vitest): 32 tests en 7 archivos
 
 | Regla | Dónde | Técnicas |
 |---|---|---|
@@ -742,3 +748,69 @@ Comprobación: con el umbral forzado a 90 % el contenedor sale con `exit 1` y di
 3. Mis primeras corridas locales ocultaban el fallo porque encadené `docker build -q` con `&&` y
    redirigí la salida; la primera señal fue que no aparecía ningún test. Moraleja: verificar el
    código de salida, no asumir que "no hubo error".
+
+**Actualización tras el gate (sección siguiente):** los pisos subieron al valor nuevo medido. Backend:
+líneas ≥ 38 %, ramas ≥ 50 %. Frontend: líneas ≥ 74 %, ramas ≥ 88 %. La suite total es de 32 tests de
+backend y 28 de frontend.
+
+## El gate de calidad: un PR frenado por cobertura, y su corrección
+
+**Versión de la herramienta:** Vitest 5.0.3 con `@vitest/coverage-v8`.
+
+**PR #1 — rojo → verde → merge** ([PR #37](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/37)).
+Agregué `textoDeVencimiento` en `frontend/src/lib/vencimiento.ts`, una función de ~25 líneas con siete
+salidas posibles y **ningún test**. Compila (`tsc` limpio) y los 18 tests existentes seguían en verde,
+así que lo que frenó no fue la compilación del TP4 sino la calidad:
+
+- Corrida roja: [actions/runs/37682311566](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37682311566),
+  job `build-frontend`. El estado del PR quedó `BLOCKED`. `build-backend` siguió verde: alcanza con
+  que se ponga rojo uno de los dos.
+- **Frenó en las dos métricas** (Vitest 5 cuenta las ramas de una función que nadie llama): el log dice
+  `Coverage for lines (46.51%) does not meet global threshold (64%)` y
+  `Coverage for branches (50%) does not meet global threshold (80%)`.
+- Corrección: 7 tests, **uno por cada camino que el código declara** (hace 3 días, ayer, hoy, mañana,
+  en 5 días, devuelto con fecha, devuelto sin fecha) más dos de borde (23:59 UTC sigue siendo el mismo
+  día; cruce de fin de año). Corrida verde:
+  [actions/runs/37682609008](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37682609008).
+  Frontend: 74,41 % de líneas y 88,23 % de ramas.
+
+**PR #2 — queda abierto y en rojo a propósito** ([PR #38](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/38)).
+Abierto desde `main` después del merge anterior, ahora del lado del **backend**:
+`backend/src/domain/retraso.ts` (`diasDeRetraso` y `nivelDeRetraso`, cinco niveles, sin tests). Compila,
+los 32 tests pasan, y el check `build-backend` quedó rojo con
+`Coverage for lines (35.46%) does not meet global threshold (38%)` y
+`Coverage for branches (42.39%) does not meet global threshold (50%)`
+([corrida](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37683113943)).
+No se arregla ni se cierra hasta la defensa: es la prueba visible de que el freno funciona, más
+convincente que la pantalla de configuración de la protección de rama, que sólo ve quien administra.
+
+**Por qué hice la cuenta antes de subir.** El porcentaje es sobre todo lo medido: con 61 líneas
+cubiertas de 157, agregar 5 líneas sin tests da 61/162 = 37,7 %, apenas bajo el piso. Por eso el
+código nuevo es de ~15 líneas ejecutables.
+
+### Ejercicio de la rama sin cubrir
+
+1. **Qué línea:** `backend/src/services/prestamos.service.ts:54`, el `if (!persona)` de `crearPrestamo`.
+   El reporte `lcov` la marca con la rama «verdadera» en 0: los tests recorrían el camino feliz y el del
+   equipo inexistente, pero nunca el de la persona inexistente.
+2. **Qué entrada la recorre:** un `personaId` que no existe (el doble de Prisma responde `null` en
+   `persona.findUnique`) con un equipo que sí existe. Debe lanzar `NotFoundError("Persona no encontrada")`.
+3. **Qué decidí:** agregar el test. Es la regla 1 del enunciado (no se presta a quien no existe) y el
+   único camino de esa función sin protección; además verifica que **no se cree** el préstamo. El
+   backend pasó de 49 % a 50 % de ramas.
+
+### Qué aprendí
+
+- Un test verde no significa «probado»: las 18 pruebas del frontend pasaban con 46 % de líneas.
+- La cobertura señala dónde mirar, no qué hacer. Medir sin exclusiones daba 12 % en el frontend: la
+  lista de exclusiones es una decisión de diseño y tiene que poder defenderse línea por línea.
+- Falló un supuesto mío: pensé que el umbral de un lado solo bastaba para la demostración; con Vitest 5
+  caen líneas y ramas a la vez, así que pongo umbral en ambas.
+
+## Declaración de uso de IA (TP5)
+
+Usé Claude Code como asistente para extraer la lógica a funciones puras, escribir los tests, configurar
+la cobertura y armar el pipeline. Lo que verifiqué yo: corrí cada suite, hice mutación manual (cambiar
+una regla y ver el test ponerse en rojo: 7 de 7 en backend y 6 de 6 en frontend), comprobé el umbral
+forzando un valor imposible y revisé los reportes de la corrida roja y la verde.
+
