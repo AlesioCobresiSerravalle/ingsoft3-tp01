@@ -27,9 +27,9 @@ export default defineConfig({
       reporter: ["text", "text-summary", "json-summary", "lcov"],
       reportsDirectory: "coverage",
       reportOnFailure: true, // el reporte se genera aunque falle un test o el umbral
-      // Umbral anclado en la medición real (líneas 64+, ramas 80+ de piso):
+      // Umbral anclado en la medición real (líneas 74+, ramas 88+ de piso):
       // si baja, el proceso sale con código != 0 y rompe el build.
-      thresholds: { lines: 64, branches: 80 },
+      thresholds: { lines: 74, branches: 88 },
     },
   },
   server: {
