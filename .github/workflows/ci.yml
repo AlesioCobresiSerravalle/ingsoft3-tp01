@@ -21,6 +21,40 @@ jobs:
       - name: Preparar el constructor que sabe cachear
         uses: docker/setup-buildx-action@v4
 
+      - name: Construir la etapa de tests del backend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          target: test
+          load: true
+          push: false
+          tags: backend:test
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Correr tests con cobertura (el umbral rompe el build)
+        run: |
+          mkdir -p coverage-backend
+          docker run --rm -v "$PWD/coverage-backend:/reports" backend:test
+
+      - name: Resumen de cobertura en el job
+        if: ${{ !cancelled() }}
+        run: |
+          f=coverage-backend/coverage-summary.json
+          if [ -f "$f" ]; then
+            jq -r '"### Cobertura backend\n\n| Métrica | % |\n|---|---|\n| Líneas | \(.total.lines.pct) |\n| Ramas | \(.total.branches.pct) |\n| Funciones | \(.total.functions.pct) |\n| Sentencias | \(.total.statements.pct) |"' "$f" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No se generó reporte de cobertura del backend (falló antes de medir)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Guardar el reporte de cobertura del backend
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: coverage-backend/
+          if-no-files-found: ignore
+
       - name: Construir la imagen del backend
         uses: docker/build-push-action@v7
         with:
@@ -43,6 +77,40 @@ jobs:
 
       - name: Preparar el constructor que sabe cachear
         uses: docker/setup-buildx-action@v4
+
+      - name: Construir la etapa de tests del frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          target: test
+          load: true
+          push: false
+          tags: frontend:test
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Correr tests con cobertura (el umbral rompe el build)
+        run: |
+          mkdir -p coverage-frontend
+          docker run --rm -v "$PWD/coverage-frontend:/reports" frontend:test
+
+      - name: Resumen de cobertura en el job
+        if: ${{ !cancelled() }}
+        run: |
+          f=coverage-frontend/coverage-summary.json
+          if [ -f "$f" ]; then
+            jq -r '"### Cobertura frontend\n\n| Métrica | % |\n|---|---|\n| Líneas | \(.total.lines.pct) |\n| Ramas | \(.total.branches.pct) |\n| Funciones | \(.total.functions.pct) |\n| Sentencias | \(.total.statements.pct) |"' "$f" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No se generó reporte de cobertura del frontend (falló antes de medir)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Guardar el reporte de cobertura del frontend
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: coverage-frontend/
+          if-no-files-found: ignore
 
       - name: Construir la imagen del frontend
         uses: docker/build-push-action@v7
