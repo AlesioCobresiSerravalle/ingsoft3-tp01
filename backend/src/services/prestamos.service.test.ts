@@ -61,6 +61,13 @@ describe("crearPrestamo (regla 2: un equipo prestado no se vuelve a prestar)", (
 
     await expect(crearPrestamo(entrada)).rejects.toBeInstanceOf(NotFoundError);
   });
+
+  it("falla con NotFoundError si la persona no existe, y NO crea nada", async () => {
+    db.persona.findUnique.mockResolvedValue(null);
+
+    await expect(crearPrestamo(entrada)).rejects.toThrow("Persona no encontrada");
+    expect(db.prestamo.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("registrarDevolucion", () => {
