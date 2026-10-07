@@ -650,3 +650,33 @@ límite de la ventana, `>0`→`>1` en el estado del equipo, no restar los presta
 aflojar la validación de fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo
 en rojo** y el código se restauró. Esto no es el pipeline: se corrió en mi máquina, como
 diagnóstico, igual que dice el §2.4.
+
+## Suite de frontend (Vitest, sin DOM): 18 tests en 3 archivos
+
+Igual que en el backend, primero hubo que **sacar la lógica de los componentes**. Estaba adentro de
+`PrestamoTable`/`EquipoTable`/`PrestamoForm`, donde sólo se podía probar renderizando. Ahora vive en
+`frontend/src/lib/` como funciones puras y los componentes sólo las llaman:
+
+- `lib/fechas.ts`: `formatearFecha` (el arreglo del off-by-one de zona horaria de la Fase 11, que hasta
+  ahora no tenía ningún test que lo protegiera) y `fechaInputAIso`, que ahora rechaza una fecha
+  inválida con un mensaje en vez de dejar que `toISOString()` tire un `RangeError` críptico.
+- `lib/estados.ts`: traduce lo que **ya decidió el backend** (`estado`, `vencido`) a etiqueta + color.
+  No calcula nada: el vencido sigue siendo del backend.
+
+| Técnica | Dónde |
+|---|---|
+| Parametrizado (`it.each`) | fechas (3 días, incluido fin de año), etiquetas de estado, fechas inválidas |
+| Caso de error | `fechaInputAIso("")` y `apiFetch` ante un 409 (propaga el mensaje del backend) y ante un 502 con HTML (cae a `Error 502`) |
+| **Mock** | `vi.stubGlobal("fetch", …)`: el test no sale a la red, y después verifica **a qué URL** se llamó (`/api/equipos?q=kit%20uno%26x`). Es la regla de la Fase 9 (ruta relativa) convertida en test |
+
+Un cambio de comportamiento deliberado: `formatearFecha` ahora usa el locale `es-AR` fijo en vez del
+del navegador, para que el test dé lo mismo en cualquier máquina o runner. En un navegador configurado
+en otro idioma las fechas se ven en formato argentino; para una app de uso en la institución es lo
+correcto, y el costo es no respetar el idioma del navegador.
+
+**Mutación manual (6 mutantes, 6 detectados):** forzar otra zona horaria en las fechas (2 tests en
+rojo), apagar la prioridad del vencido, cambiar el color de Disponible, hardcodear
+`http://localhost:3000` en `BASE_URL` (3 en rojo), tratar 200 como 204, y no codificar la búsqueda.
+
+`vite.config.ts` ya excluye `e2e/**` de Vitest, para que los specs de Playwright del TP7 no los
+levante el runner equivocado (la trampa que avisa la guía).

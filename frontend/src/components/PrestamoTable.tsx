@@ -1,19 +1,12 @@
 import type { Prestamo } from "../types/prestamo";
+import { etiquetaDePrestamo } from "../lib/estados";
+import { formatearFecha } from "../lib/fechas";
 import { StateMessage } from "./StateMessage";
 import { StatusBadge } from "./StatusBadge";
 
 interface Props {
   prestamos: Prestamo[];
   onDevolucion: (prestamo: Prestamo) => void;
-}
-
-// Se fuerza UTC al formatear: estas fechas representan un DÍA (elegido en un
-// <input type="date">, que no lleva hora), no un instante preciso. Sin
-// forzar la zona horaria, `toLocaleDateString()` convierte a la hora local
-// del navegador y en cualquier huso horario detrás de UTC se ve el día
-// anterior al elegido — un off-by-one real, no cosmético.
-function formatearFecha(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 export function PrestamoTable({ prestamos, onDevolucion }: Props) {
@@ -44,13 +37,7 @@ export function PrestamoTable({ prestamos, onDevolucion }: Props) {
               <td>{formatearFecha(prestamo.fechaDevolucionPrevista)}</td>
               <td>{prestamo.fechaDevolucionReal ? formatearFecha(prestamo.fechaDevolucionReal) : "—"}</td>
               <td>
-                {prestamo.vencido ? (
-                  <StatusBadge label="Vencido" tono="danger" />
-                ) : prestamo.estado === "ACTIVO" ? (
-                  <StatusBadge label="Activo" tono="info" />
-                ) : (
-                  <StatusBadge label="Devuelto" tono="success" />
-                )}
+                <StatusBadge {...etiquetaDePrestamo(prestamo)} />
               </td>
               <td>
                 {prestamo.estado === "ACTIVO" && (

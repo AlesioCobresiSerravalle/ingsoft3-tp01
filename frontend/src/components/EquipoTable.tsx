@@ -1,4 +1,5 @@
 import type { Equipo } from "../types/equipo";
+import { etiquetaDeEquipo } from "../lib/estados";
 import { StateMessage } from "./StateMessage";
 import { StatusBadge } from "./StatusBadge";
 
@@ -32,11 +33,7 @@ export function EquipoTable({ equipos, onEditar, onEliminar }: Props) {
               <td>{equipo.categoria}</td>
               <td>{equipo.codigo}</td>
               <td>
-                {equipo.estado === "DISPONIBLE" ? (
-                  <StatusBadge label="Disponible" tono="success" />
-                ) : (
-                  <StatusBadge label="Prestado" tono="info" />
-                )}
+                <StatusBadge {...etiquetaDeEquipo(equipo.estado)} />
               </td>
               <td className="actions-cell">
                 <button className="btn btn-secondary btn-sm" onClick={() => onEditar(equipo)}>
