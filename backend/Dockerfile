@@ -27,6 +27,7 @@ CMD ["npx", "vitest", "run", "--coverage", "--coverage.reportsDirectory=/reports
 
 # ---- Etapa 2: runtime (imagen mínima, sin herramientas de compilación) ----
 FROM node:22-alpine AS final
+LABEL org.opencontainers.image.source="https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01"
 WORKDIR /app
 ENV NODE_ENV=production
 

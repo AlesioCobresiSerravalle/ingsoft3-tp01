@@ -814,3 +814,48 @@ la cobertura y armar el pipeline. Lo que verifiqué yo: corrí cada suite, hice 
 una regla y ver el test ponerse en rojo: 7 de 7 en backend y 6 de 6 en frontend), comprobé el umbral
 forzando un valor imposible y revisé los reportes de la corrida roja y la verde.
 
+
+# TP6 — Entrega continua, entornos y rollback
+
+## El artefacto: el pipeline publica las imágenes, y sólo las que pasaron
+
+Hasta el TP5 el pipeline *verificaba*; ahora también *entrega*. Cada job (`build-backend`,
+`build-frontend`) termina publicando su imagen en `ghcr.io`.
+
+- **Dos paquetes**, porque CampusGear tiene dos Dockerfiles:
+  `ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-backend` y `…-frontend`. El nombre va escrito a mano
+  en minúsculas: el registry no acepta mayúsculas y mi usuario las tiene, así que
+  `${{ github.repository }}` habría fallado con `repository name must be lowercase`.
+- **Etiqueta = el commit** (`sha-<commit completo>`), no `latest` ni una versión a mano: dado el tag
+  de una imagen, se sabe exactamente qué código la produjo. No existe `latest`, porque una etiqueta
+  que se mueve no dice qué verificó el pipeline.
+- **Paquetes nuevos y no los viejos.** Los anteriores (`campusgear-backend` / `-frontend`, `v0.1.0`)
+  los subí a mano con un token personal en el TP2. El `GITHUB_TOKEN` de una corrida podría no tener
+  permiso de escritura sobre paquetes creados por otra credencial, y reutilizarlos era apostar a eso.
+  Los nuevos nacen de este pipeline y quedan enlazados al repositorio con
+  `LABEL org.opencontainers.image.source` en cada Dockerfile.
+- **Sin secrets nuevos.** El login usa `GITHUB_TOKEN`, que GitHub entrega a cada corrida y que muere
+  con el job. `permissions: { contents: read, packages: write }` está declarado **dentro de cada
+  job** y no arriba del workflow: es mínimo privilegio, y si algún día se agrega un job de otra cosa
+  no hereda escritura de paquetes.
+
+**La cadena de confianza son tres eslabones, y ninguno es un `if` sobre "los tests pasaron":**
+
+1. Nada llega a `main` sin pasar los checks requeridos (protección de rama del TP4).
+2. Sólo `main` publica: el paso de publicar lleva `push: ${{ github.event_name == 'push' &&
+   github.ref == 'refs/heads/main' }}`. Las dos condiciones a propósito: si algún día el disparador
+   escucha otra rama, publicar sigue exigiendo `main`. «Entrar al registry» sólo corre en `push`.
+3. **Construir y publicar es el último paso del job**, después de correr los tests y subir el
+   reporte. Los pasos de un job se cortan al primer error, así que si los tests o el umbral fallan,
+   el paso que publica nunca se alcanza. Lo publicado es lo mismo que se verificó, porque lo
+   construye ese mismo paso y no un job aparte que reconstruiría.
+
+Para llegar ahí hubo que **mover** el build de la imagen: en el TP4 estaba primero (con
+`push: false`) y ahora está al final. Si hubiera quedado arriba, todo seguiría verde y el pipeline
+publicaría imágenes antes de saber si los tests pasaban; la única señal sería el orden en el log.
+Los pasos del reporte de cobertura sí llevan `!cancelled()` (queremos el reporte justo cuando el
+umbral falla); los que publican **no** llevan ninguna función de estado.
+
+Un solo detalle que queda para otra sección: los entornos de Render del TP6 reconstruyen la app
+desde el repositorio, así que estas imágenes quedan guardadas y etiquetadas pero todavía no son lo
+que corre en QA/PROD. Eso lo cambia el TP7.
