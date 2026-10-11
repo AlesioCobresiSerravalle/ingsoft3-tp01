@@ -859,3 +859,46 @@ umbral falla); los que publican **no** llevan ninguna función de estado.
 Un solo detalle que queda para otra sección: los entornos de Render del TP6 reconstruyen la app
 desde el repositorio, así que estas imágenes quedan guardadas y etiquetadas pero todavía no son lo
 que corre en QA/PROD. Eso lo cambia el TP7.
+
+## La configuración vive fuera de la imagen
+
+**Principio:** una imagen se construye una vez y se despliega muchas; lo que cambia entre compose, QA
+y PROD es la *configuración*, nunca el build. Había dos cosas cableadas dentro de la imagen.
+
+**1. A dónde reenvía nginx `/api`.** `frontend/nginx.conf` tenía escrito `http://backend:3000` y el DNS
+interno de Docker (`127.0.0.11`): válido sólo dentro de compose. Ahora es
+`frontend/default.conf.template`, y la imagen oficial de nginx le aplica `envsubst` al arrancar:
+
+| Variable | Qué configura | Default (en el Dockerfile) |
+|---|---|---|
+| `BACKEND_URL` | destino del proxy de `/api` | `http://backend:3000` |
+| `DNS_RESOLVER` | quién resuelve ese nombre | `127.0.0.11` (DNS de Docker) |
+
+Los defaults hacen que `docker compose up` siga andando sin configurar nada. Dos cuidados:
+`envsubst` sólo reemplaza las variables de entorno que existen, así que `$uri` y `$backend_api` de
+nginx sobreviven; y para un backend **HTTPS** (un servicio público de la nube) hicieron falta
+`proxy_ssl_server_name on` y `proxy_set_header Host $proxy_host`, o el handshake TLS y el ruteo por
+`Host` fallan.
+
+**Cómo lo comprobé:** (a) con los defaults, compose levanta y `/api/...` responde por el 8080;
+(b) la misma imagen con `BACKEND_URL=https://api.github.com` y `DNS_RESOLVER=1.1.1.1` genera la
+configuración esperada y devuelve la respuesta de GitHub (su propio `404 Not Found` en JSON, no un
+502 de nginx: eso prueba que SNI y `Host` están bien); (c) el fallback de la SPA (`/prestamos` → 200
+con el `index.html`) sigue funcionando.
+
+**Límite conocido:** `DNS_RESOLVER` depende de la plataforma. En Render el resolver no es el de
+Docker; se carga como variable del servicio (se verifica en la Fase 27, no se asume).
+
+**2. Migraciones.** La imagen final del backend no trae el CLI de Prisma (decisión del TP2: pesaba
+~150 MB), así que no puede migrar a una base remota. Las migraciones no se ejecutan al arrancar la
+app: las corre **el pipeline**, antes de desplegar, con `npm run migrate:deploy`
+(`prisma migrate deploy`) y la `DATABASE_URL` de cada environment como *secret* con alcance de
+environment. Es el reemplazo del `EnsureCreated()` que usa el ejemplo de la guía: Prisma tiene
+migraciones versionadas, y `migrate deploy` es idempotente (comprobado: contra una base ya migrada
+responde `No pending migrations to apply`). Para Neon va la URL **directa** (no la *pooled*), porque
+las migraciones usan bloqueos de sesión que el pooler no garantiza.
+
+**3. `docker-compose.registry.yml`** apuntaba a `campusgear-*:v0.1.0`, los paquetes del TP2. Ahora usa
+los del pipeline, `ingsoft3-tp01-{backend,frontend}:sha-${IMAGE_SHA}`, y `IMAGE_SHA` es obligatoria
+(si falta, compose falla con un mensaje que dice qué definir). Se comprobó levantándolo con las
+imágenes publicadas del commit del merge de la Fase 25.
