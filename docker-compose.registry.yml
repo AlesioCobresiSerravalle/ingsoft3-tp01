@@ -28,7 +28,7 @@ services:
         condition: service_healthy
 
   backend:
-    image: ghcr.io/alesiocobresiserravalle/campusgear-backend:v0.1.0 # antes: build: ./backend
+    image: ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-backend:sha-${IMAGE_SHA:?definí IMAGE_SHA con el commit a correr} # antes: build: ./backend
     environment:
       DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/campusgear?schema=public"
     ports:
@@ -40,7 +40,7 @@ services:
         condition: service_completed_successfully
 
   frontend:
-    image: ghcr.io/alesiocobresiserravalle/campusgear-frontend:v0.1.0 # antes: build: ./frontend
+    image: ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-frontend:sha-${IMAGE_SHA:?definí IMAGE_SHA con el commit a correr} # antes: build: ./frontend
     ports:
       - "8080:80"
     depends_on:

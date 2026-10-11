@@ -55,8 +55,12 @@ Igual que arriba, pero con `docker-compose.registry.yml`, que descarga `backend`
 
 ```bash
 cp .env.example .env
-docker compose -f docker-compose.registry.yml up -d --build
+# IMAGE_SHA = commit de main cuyas imágenes querés correr (etiqueta sha-<commit>)
+IMAGE_SHA=$(git rev-parse origin/main) docker compose -f docker-compose.registry.yml up -d --build
 ```
+
+Las imágenes no llevan configuración adentro: el frontend recibe `BACKEND_URL` y `DNS_RESOLVER` por
+variables de entorno (defaults: `http://backend:3000` y `127.0.0.11`, los de compose).
 
 ## Comandos útiles
 

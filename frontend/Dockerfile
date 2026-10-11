@@ -19,6 +19,10 @@ CMD ["npx", "vitest", "run", "--coverage", "--coverage.reportsDirectory=/reports
 # ---- Etapa 2: nginx sirve los estáticos ----
 FROM nginx:alpine
 LABEL org.opencontainers.image.source="https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01"
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Plantilla, no config final: nginx la procesa al arrancar con las variables
+# de entorno. Los defaults hacen que compose siga andando sin configurar nada.
+ENV BACKEND_URL=http://backend:3000 \
+    DNS_RESOLVER=127.0.0.11
+COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
