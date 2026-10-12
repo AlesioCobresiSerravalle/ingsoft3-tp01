@@ -902,3 +902,85 @@ las migraciones usan bloqueos de sesión que el pooler no garantiza.
 los del pipeline, `ingsoft3-tp01-{backend,frontend}:sha-${IMAGE_SHA}`, y `IMAGE_SHA` es obligatoria
 (si falta, compose falla con un mensaje que dice qué definir). Se comprobó levantándolo con las
 imágenes publicadas del commit del merge de la Fase 25.
+
+## Entornos: Neon (bases) y Render (ejecución)
+
+**Dos bases, un solo servidor.** En Neon (plan gratuito, proyecto `campusgear`, AWS US East 2) hay dos
+bases dentro de la misma rama, `app_qa` y `app_prod`: entornos separados a nivel de datos, suficiente
+para la materia. Elegí Neon y no el Postgres de Render porque el gratuito de Render **expira a los 30
+días**; el de Neon es permanente (con límites de uso y suspensión por inactividad). Elegir infraestructura
+también es leer la letra chica.
+
+**Cuatro Web Services de Render con Docker**, todos con *Auto-Deploy desactivado*, porque el deploy lo
+dispara el pipeline, no el proveedor: si Render se desplegara solo en cada push, el deploy no esperaría
+a la CI verde ni a la aprobación.
+
+| Servicio | URL | Base |
+|---|---|---|
+| `campusgear-api-qa` | https://campusgear-api-qa.onrender.com | `app_qa` |
+| `campusgear-front-qa` | https://campusgear-front-qa.onrender.com | — (proxy a la api de QA) |
+| `campusgear-api-prod` | https://campusgear-api-prod.onrender.com | `app_prod` |
+| `campusgear-front-prod` | https://campusgear-front-prod.onrender.com | — (proxy a la api de PROD) |
+
+Configuración que distingue un entorno del otro (nunca está en la imagen): `DATABASE_URL` en cada api,
+y `BACKEND_URL` (la api **de su entorno**, `https://…`, sin barra final), `DNS_RESOLVER=8.8.8.8` y
+`PORT=80` en cada front. Las credenciales (las dos `DATABASE_URL` y los cuatro deploy hooks) viven como
+*secrets con alcance de environment* en GitHub (`qa` y `production`), nunca en el repo ni en el chat.
+
+**Lo que se pierde porque Render reconstruye.** En este TP los servicios de Render construyen la imagen
+desde el repositorio, así que lo que corre en QA y en PROD **no es la imagen que los tests del pipeline
+aprobaron**: es otra construcción del mismo commit. Puede salir distinta si una dependencia o la imagen
+base cambió entre un build y el otro. Se rompe el principio «se promueve lo mismo que se verificó».
+Las imágenes de `ghcr.io` quedan publicadas y etiquetadas pero no son las que corren; que sí lo sean es
+el TP7.
+
+**Letra chica del plan gratuito.** Los servicios se duermen a los 15 minutos sin tráfico y el primer
+pedido tarda cerca de un minuto (arranque en frío); las 750 horas mensuales son del *workspace* y
+cuatro servicios siempre despiertos las agotarían, por eso importa que se duerman. Neon también
+suspende el cómputo por inactividad. El smoke test lo tiene en cuenta (30 reintentos cada 20 s).
+
+### Problemas que aparecieron
+
+1. **502 en los dos frontends con las variables "bien puestas".** El log de nginx decía
+   `backend could not be resolved` con `resolver: 127.0.0.11:53`: esos son los **valores por defecto de
+   compose**, no los que yo había cargado en Render. Las variables de entorno se cargaron *después* del
+   primer deploy y Render no reinicia el contenedor al guardarlas. Un **Manual Deploy** las aplicó.
+   Lo descarté primero probando la misma imagen en mi máquina con esos mismos valores (funcionaba), lo que
+   mostraba que el problema era de configuración en Render y no del código.
+2. **Un segundo 502, con otro formato**, justo después del redeploy: la cabecera
+   `x-render-routing: no-deploy` mostraba que Render todavía no tenía instancia activa. Se resolvió
+   sola en un minuto. Moraleja: mirar quién devuelve el error (nginx o la plataforma) antes de tocar nada.
+
+## El deploy desde el pipeline y el gate humano
+
+El workflow tiene ahora dos jobs de despliegue, ambos **sólo en `push` a `main`** (no en PRs):
+
+- `deploy-qa` (`needs: build-backend, build-frontend`; environment `qa`): migra `app_qa`, dispara los
+  hooks de Render con `ref=<commit>` y corre el smoke test.
+- `deploy-prod` (`needs: deploy-qa`; environment `production`): lo mismo contra `app_prod`, **pero
+  GitHub lo deja esperando hasta que el revisor requerido lo apruebe o lo rechace**. Sin pasar por QA no
+  se llega a PROD, y sin una persona tampoco.
+
+Decisiones de diseño:
+- **Migrar antes de desplegar, desde el pipeline.** La imagen del backend no trae el CLI de Prisma, así
+  que el job instala las dependencias y corre `prisma migrate deploy` con la `DATABASE_URL` del
+  environment. Si la migración falla (tres intentos, por si Neon estaba dormida), el job se corta
+  **antes** de tocar Render.
+- **Los hooks llevan el commit** (`&ref=$GITHUB_SHA`): le dicen a Render *qué* construir. Los secrets
+  no se imprimen.
+- **`concurrency` por entorno** (`cancel-in-progress: false`): dos corridas no despliegan al mismo
+  entorno a la vez, y una que ya está desplegando no se cancela a mitad.
+- **El revisor soy yo, con *prevent self-review* apagado.** Trabajo solo en el repositorio: con esa regla
+  encendida nadie podría aprobar nunca. El valor del gate no es que lo apruebe otra persona sino que el
+  paso a producción sea **un acto deliberado y registrado**, no un efecto secundario del merge.
+- **Qué prueba y qué no el smoke test.** Comprueba que la api, la base, el front y el proxy
+  **responden**. No prueba que estén ejecutando *este* commit: mientras Render construye el nuevo, el
+  servicio anterior sigue respondiendo y el smoke puede dar verde de inmediato. Eso se verifica en
+  *Events* de cada servicio de Render.
+
+**Evidencia: una promoción rechazada**
+([corrida 38189496720](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720)).
+El merge de este workflow desplegó QA y el job de PROD quedó esperando. Lo **rechacé** con este
+comentario: *«QA está recién migrado y todavía no creé ni edité ningún equipo en QA. No paso a PROD
+hasta verificar el flujo completo ahí.»* GitHub lo registra y la corrida termina con `deploy-prod`
+fallido: así se ve un freno humano. PROD, mientras tanto, quedó intacto (sin tablas, sin desplegar).
