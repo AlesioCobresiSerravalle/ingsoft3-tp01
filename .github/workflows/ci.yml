@@ -148,3 +148,151 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
+  # ---------------------------------------------------------------------------
+  # DEPLOY A QA: migra la base de ESTE entorno, le dice a Render que despliegue el
+  # commit de esta corrida y comprueba que el entorno responda.
+  # ---------------------------------------------------------------------------
+  deploy-qa:
+    needs: [build-backend, build-frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: qa
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-qa
+      cancel-in-progress: false
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias del backend (trae el CLI de Prisma)
+        working-directory: backend
+        run: npm ci
+
+      - name: Migrar la base de QA
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # La base serverless puede estar dormida: la primera conexión tarda.
+          # Se reintenta; si sigue fallando, el job se corta ANTES de desplegar.
+          for i in 1 2 3; do
+            npm run migrate:deploy && exit 0
+            echo "Intento $i falló; reintento en 15 s..."; sleep 15
+          done
+          exit 1
+
+      - name: Desplegar en QA el commit de esta corrida (api + front)
+        shell: bash
+        env:
+          HOOK_API: ${{ secrets.RENDER_HOOK_BACKEND }}
+          HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONTEND }}
+        run: |
+          # `ref` le dice a Render QUÉ commit construir. La URL del hook va última:
+          # es el único argumento suelto y --data-urlencode se lleva el valor
+          # que tiene al lado. Los secrets no se imprimen.
+          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_API" > /dev/null
+          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_FRONT" > /dev/null
+          echo "Deploy de $GITHUB_SHA disparado en api y front de QA"
+
+      - name: Smoke test (espera a que QA responda)
+        shell: bash
+        env:
+          URL_API: https://campusgear-api-qa.onrender.com
+          URL_FRONT: https://campusgear-front-qa.onrender.com
+        run: |
+          # Free tier: arranque en frío + build en Render => hasta ~10 min.
+          echo "Esperando a que QA esté vivo..."
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 15 "$URL_API/health" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_API/api/dashboard/resumen" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_FRONT/" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_FRONT/api/dashboard/resumen" > /dev/null; then
+              echo "OK: QA responde (api + base + front + proxy)"; exit 0
+            fi
+            echo "Intento $i/30: todavía no..."; sleep 20
+          done
+          echo "QA no respondió a tiempo"; exit 1
+
+  # ---------------------------------------------------------------------------
+  # DEPLOY A PRODUCCIÓN: igual que QA, pero `needs: deploy-qa` (sólo se promueve
+  # lo que ya pasó por QA) y el environment `production` exige la aprobación de
+  # un revisor: el job queda en espera hasta que alguien lo aprueba o lo rechaza.
+  # ---------------------------------------------------------------------------
+  deploy-prod:
+    needs: deploy-qa
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias del backend (trae el CLI de Prisma)
+        working-directory: backend
+        run: npm ci
+
+      - name: Migrar la base de PROD
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # La base serverless puede estar dormida: la primera conexión tarda.
+          # Se reintenta; si sigue fallando, el job se corta ANTES de desplegar.
+          for i in 1 2 3; do
+            npm run migrate:deploy && exit 0
+            echo "Intento $i falló; reintento en 15 s..."; sleep 15
+          done
+          exit 1
+
+      - name: Desplegar en PROD el commit de esta corrida (api + front)
+        shell: bash
+        env:
+          HOOK_API: ${{ secrets.RENDER_HOOK_BACKEND }}
+          HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONTEND }}
+        run: |
+          # `ref` le dice a Render QUÉ commit construir. La URL del hook va última:
+          # es el único argumento suelto y --data-urlencode se lleva el valor
+          # que tiene al lado. Los secrets no se imprimen.
+          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_API" > /dev/null
+          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_FRONT" > /dev/null
+          echo "Deploy de $GITHUB_SHA disparado en api y front de PROD"
+
+      - name: Smoke test (espera a que PROD responda)
+        shell: bash
+        env:
+          URL_API: https://campusgear-api-prod.onrender.com
+          URL_FRONT: https://campusgear-front-prod.onrender.com
+        run: |
+          # Free tier: arranque en frío + build en Render => hasta ~10 min.
+          echo "Esperando a que PROD esté vivo..."
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 15 "$URL_API/health" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_API/api/dashboard/resumen" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_FRONT/" > /dev/null \
+               && curl -fsS --max-time 15 "$URL_FRONT/api/dashboard/resumen" > /dev/null; then
+              echo "OK: PROD responde (api + base + front + proxy)"; exit 0
+            fi
+            echo "Intento $i/30: todavía no..."; sleep 20
+          done
+          echo "PROD no respondió a tiempo"; exit 1
