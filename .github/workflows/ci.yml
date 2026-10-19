@@ -228,12 +228,99 @@ jobs:
           echo "QA no respondió a tiempo"; exit 1
 
   # ---------------------------------------------------------------------------
-  # DEPLOY A PRODUCCIÓN: igual que QA, pero `needs: deploy-qa` (sólo se promueve
-  # lo que ya pasó por QA) y el environment `production` exige la aprobación de
+  # INTEGRACIÓN: pedidos HTTP a la API de QA ya desplegada (con su base de
+  # verdad), sin navegador y sin dobles. Si falla, el job queda en rojo y
+  # NADA de lo que viene después corre: el gate se lee en `needs`, no en un `if`.
+  # ---------------------------------------------------------------------------
+  integracion:
+    needs: deploy-qa
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias del frontend (trae Playwright)
+        working-directory: frontend
+        run: npm ci
+
+      # No hace falta bajar ningún navegador: el fixture `request` es un cliente HTTP.
+      - name: Pruebas de integración contra la API de QA
+        working-directory: frontend
+        env:
+          API_BASE_URL: https://campusgear-api-qa.onrender.com
+          PLAYWRIGHT_HTML_REPORT: reporte-integracion
+        run: npx playwright test e2e/api.spec.js --output=resultados-integracion
+
+      - name: Guardar el reporte de integración
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-integracion
+          path: frontend/reporte-integracion/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # E2E: un navegador real contra el front de QA (que habla con su API y su
+  # base). Es el último escalón antes de producción.
+  # ---------------------------------------------------------------------------
+  e2e:
+    needs: integracion
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias del frontend (trae Playwright)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Instalar el navegador (Chromium)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas extremo a extremo contra QA
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: https://campusgear-front-qa.onrender.com
+          API_BASE_URL: https://campusgear-api-qa.onrender.com
+          PLAYWRIGHT_HTML_REPORT: reporte-e2e
+        run: npx playwright test e2e/equipos.spec.js --output=resultados-e2e
+
+      - name: Guardar el reporte e2e
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-e2e
+          path: frontend/reporte-e2e/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # DEPLOY A PRODUCCIÓN: igual que QA, pero `needs: e2e` (sólo se promueve
+  # lo que ya pasó por QA, por la integración y por la e2e) y el environment `production` exige la aprobación de
   # un revisor: el job queda en espera hasta que alguien lo aprueba o lo rechaza.
   # ---------------------------------------------------------------------------
   deploy-prod:
-    needs: deploy-qa
+    needs: e2e
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production

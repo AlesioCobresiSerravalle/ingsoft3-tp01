@@ -21,3 +21,7 @@ coverage/
 # reportes de Playwright (se regeneran en cada corrida)
 playwright-report/
 test-results/
+reporte-integracion/
+reporte-e2e/
+resultados-integracion/
+resultados-e2e/
