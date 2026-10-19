@@ -1,6 +1,25 @@
 # Decisiones — CampusGear
 
-Documento único y acumulativo: un bloque por TP (TP1 … TP5).
+## Enlaces de este TP (TP6)
+
+| Qué | Dónde |
+|---|---|
+| Repositorio | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01 |
+| Paquete backend (público) | https://github.com/users/AlesioCobresiSerravalle/packages/container/package/ingsoft3-tp01-backend |
+| Paquete frontend (público) | https://github.com/users/AlesioCobresiSerravalle/packages/container/package/ingsoft3-tp01-frontend |
+| **QA** (front / api) | https://campusgear-front-qa.onrender.com · https://campusgear-api-qa.onrender.com |
+| **PROD** (front / api) | https://campusgear-front-prod.onrender.com · https://campusgear-api-prod.onrender.com |
+| Workflow | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/.github/workflows/ci.yml |
+| Corrida de un PR con los tests en verde (*«Entrar al registry»* **salteado**) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37839648132 |
+| Corrida de `main` donde *«Construir y publicar»* es el **último** paso | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37845033074 |
+| Promoción a PROD **rechazada** (con comentario) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720 |
+| Promoción a PROD **aprobada** (QA → PROD) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38190083879 |
+| PR que agregó el publicado de imágenes | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/45 |
+| PR que sacó la configuración de la imagen | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/46 |
+| PR que agregó el deploy a QA y PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/47 |
+| Release del TP5 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v5.0.0 |
+
+Documento único y acumulativo: un bloque por TP (TP1 … TP6).
 
 # TP1 — Fundamentos y API
 
@@ -984,3 +1003,80 @@ El merge de este workflow desplegó QA y el job de PROD quedó esperando. Lo **r
 comentario: *«QA está recién migrado y todavía no creé ni edité ningún equipo en QA. No paso a PROD
 hasta verificar el flujo completo ahí.»* GitHub lo registra y la corrida termina con `deploy-prod`
 fallido: así se ve un freno humano. PROD, mientras tanto, quedó intacto (sin tablas, sin desplegar).
+
+## Aislamiento: cómo comprobé que cada entorno usa su propia base
+
+El error más silencioso de este TP es que PROD apunte a la base de QA: las dos `DATABASE_URL`
+difieren en una sola palabra (`app_qa` / `app_prod`), y si se cruzan **nada se pone rojo**: PROD levanta,
+contesta y el smoke da verde. Por eso lo comprobé con un dato que sólo existe en una base:
+
+1. Inserté desde el SQL Editor de Neon, **con `app_prod` seleccionada**, un equipo inconfundible
+   (`SOY PROD`, código `PROD-AISLAMIENTO`).
+2. Pedí la lista de equipos a las dos APIs y a los dos frontends: **PROD** devolvió el equipo y **QA**
+   devolvió `[]`, tanto directo a la API como a través del proxy de nginx de cada frontend.
+3. Borré el dato de prueba.
+
+Esto además es una prueba de que cada frontend apunta a **la API de su entorno** (`BACKEND_URL`).
+
+## Rollback: lo que intenté, lo que falló y lo que medí
+
+Sobre `campusgear-api-prod` (que tiene dos deploys: el inicial `c4e31c6` y el del pipeline `2c71e16`):
+
+- **Por el botón *Rollback* de Render: falló.** Respondió `Error: could not roll back to deploy
+  dep-db61lvid0e5s7392lf0g`, dos veces, con el servicio despierto y sano. La documentación de Render dice
+  que sólo se puede volver a deploys cuyo artefacto de build siga guardado, y que en el plan gratuito
+  se retienen pocos; las páginas no coinciden del todo en el número, así que **no afirmo cuál fue la
+  causa** en mi caso. Lo dejo registrado tal cual: en un entorno real el botón de emergencia también
+  puede no estar.
+- **Alternativa que sí funcionó: redesplegar el commit anterior**
+  (*Manual Deploy → Deploy a specific commit → `c4e31c6`*). Cronometrado a mano, de confirmar a *Live*:
+  **28,48 s**. Verifiqué desde afuera que PROD quedó sano con ese commit (`/health`, dashboard con la
+  base de PROD y proxy del frontend respondiendo).
+- **Volver al último commit** (`2c71e16`): **30,09 s**.
+- Para comparar, la duración de los deploys que muestra Render: 57,9 s el primero y 24,5 s el del
+  pipeline (con capas de Docker ya en caché).
+
+**Qué significa:** como Render reconstruye desde el repositorio, **un rollback por commit es un deploy
+más, no una vuelta atrás instantánea**: ~30 s en este proyecto chico porque las capas ya estaban en
+caché, y bastante más con dependencias nuevas o caché frío. Con el botón de Render (si anda) se reutiliza
+un build ya hecho y es más rápido. Y el cronómetro no cuenta el arranque en frío posterior ni el tiempo
+de darse cuenta de que hay que volver. **Lo que un rollback no deshace:** las migraciones de la base. Si
+un deploy migró una tabla, volver al código anterior no la revierte; por eso las migraciones se escriben
+compatibles hacia atrás (agregar antes que quitar).
+
+## Cierre del TP6: qué es CD, qué pattern uso y qué entrega este pipeline
+
+**Continuous Delivery vs. Continuous Deployment.** En *Delivery* cada cambio que pasa los checks queda
+**listo para producción** y hay una decisión humana para salir; en *Deployment* sale solo. Este
+proyecto es **Continuous Delivery**: todo lo verificable es automático (tests, cobertura, imágenes, deploy
+a QA con smoke) pero **producción espera una aprobación** en el environment `production`. La aprobación
+no es burocracia: la primera que usé fue un **rechazo** con un motivo concreto (todavía no había
+mirado QA), y el pipeline respetó el freno.
+
+**Pattern de despliegue.** Uso el que trae Render por defecto en un servicio web, un **rolling deploy
+sobre una sola instancia**: levanta el contenedor nuevo y recién después reemplaza al anterior, y lo que
+el pipeline añade es la **promoción escalonada** (QA primero, PROD después de la aprobación). No
+implementé blue/green ni canary: con un plan gratuito de una instancia por servicio no hay cómo mantener
+dos versiones vivas a la vez ni repartir tráfico, y pretender lo contrario sería inventar una garantía.
+**Consecuencia honesta:** en free tier no puedo asegurar cero cortes durante un deploy, y los arranques
+en frío empeoran la percepción.
+
+**Qué entrega este pipeline y qué no.**
+- Entrega: imágenes `sha-<commit>` publicadas sólo desde `main` y sólo tras los tests; migración de la
+  base de cada entorno **antes** de desplegar; deploy a QA con smoke; promoción a PROD con aprobación y
+  concurrencia por entorno.
+- **No** entrega (todavía): que QA y PROD ejecuten *la imagen que se verificó*. Render reconstruye desde
+  el repositorio, así que lo que corre es otra construcción del mismo commit. Y el smoke test no prueba
+  qué commit corre, sólo que el entorno responde. Ambos huecos son el tema del TP7.
+- **Plan C** (si Render dejara de servir el plan gratuito): un *runner* propio de GitHub Actions con
+  `docker-compose.registry.yml`, que ya usa las imágenes publicadas por el pipeline
+  (`IMAGE_SHA=<commit>`). No hace falta activarlo; queda documentado.
+
+## Declaración de uso de IA (TP6)
+
+Usé Claude Code para escribir el workflow, la plantilla de nginx y las explicaciones, y para
+diagnosticar fallas leyendo logs. Lo que hice yo, a mano y en las consolas de cada servicio: crear las
+cuentas y servicios de Neon y Render, cargar las `DATABASE_URL` y los deploy hooks como secrets (nunca
+pasaron por el chat), aprobar y **rechazar** promociones, ejecutar el dato `SOY PROD` en la base y
+cronometrar el rollback. Los dos 502 de los frontends los resolvimos juntos: yo copié los logs de
+Render, la IA propuso la causa y yo apliqué el redeploy.
