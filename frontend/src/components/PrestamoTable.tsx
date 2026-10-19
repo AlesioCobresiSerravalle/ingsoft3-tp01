@@ -41,7 +41,11 @@ export function PrestamoTable({ prestamos, onDevolucion }: Props) {
               </td>
               <td>
                 {prestamo.estado === "ACTIVO" && (
-                  <button className="btn btn-primary btn-sm" onClick={() => onDevolucion(prestamo)}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    aria-label={`Registrar devolución de ${prestamo.equipo.nombre}`}
+                    onClick={() => onDevolucion(prestamo)}
+                  >
                     Registrar devolución
                   </button>
                 )}

@@ -36,10 +36,18 @@ export function EquipoTable({ equipos, onEditar, onEliminar }: Props) {
                 <StatusBadge {...etiquetaDeEquipo(equipo.estado)} />
               </td>
               <td className="actions-cell">
-                <button className="btn btn-secondary btn-sm" onClick={() => onEditar(equipo)}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  aria-label={`Editar ${equipo.nombre}`}
+                  onClick={() => onEditar(equipo)}
+                >
                   Editar
                 </button>
-                <button className="btn btn-danger btn-sm" onClick={() => onEliminar(equipo)}>
+                <button
+                  className="btn btn-danger btn-sm"
+                  aria-label={`Eliminar ${equipo.nombre}`}
+                  onClick={() => onEliminar(equipo)}
+                >
                   Eliminar
                 </button>
               </td>
