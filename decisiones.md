@@ -1080,3 +1080,75 @@ cuentas y servicios de Neon y Render, cargar las `DATABASE_URL` y los deploy hoo
 pasaron por el chat), aprobar y **rechazar** promociones, ejecutar el dato `SOY PROD` en la base y
 cronometrar el rollback. Los dos 502 de los frontends los resolvimos juntos: yo copié los logs de
 Render, la IA propuso la causa y yo apliqué el redeploy.
+
+# TP7 — Imagen inmutable, integración y extremo a extremo
+
+## Los entornos ejecutan la imagen que el pipeline construyó
+
+En el TP6 Render **reconstruía** la app desde el repositorio. Ahora los cuatro servicios (api y front,
+QA y PROD) son *image-backed* (*Existing Image*): no se compila nada, se ejecuta la imagen que el
+pipeline construyó, probó y publicó. Los servicios **no se recrearon**: se les cambió la fuente, lo que
+conserva la URL, las variables y el deploy hook. Los hooks pasaron de `&ref=<commit>` a
+`imgURL=ghcr.io/…:sha-<commit>`, y el `ref` se sacó del YAML: con una imagen no hay nada que construir.
+
+- **Lo que dice la configuración de Render no es lo que corre.** En *Settings* queda la imagen que pegué
+  una vez (`sha-dee2063…`, el punto de partida); lo que corre lo nombra cada deploy de una corrida.
+  Evidencia, en *Events* de `campusgear-front-qa` y `campusgear-api-qa`: «Triggered via Deploy Hook»
+  con `sha-ad75d69b9b19012ff892c73e1a29871ca1ebc1d4`, el commit de la corrida
+  [39301117867](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39301117867).
+- **Cuidado con *Manual Deploy*:** despliega la imagen de *Settings*, no la que está corriendo, así que
+  puede llevar un entorno **para atrás** sin avisar. Todo deploy sale de una corrida.
+- **Efecto medido:** sin compilar, el deploy de la api de QA tardó **10,3 s**, contra 23,8 s, 42,6 s y
+  27,2 s de los deploys que reconstruían.
+
+## Suites de Playwright: integración y extremo a extremo
+
+Una sola herramienta, dos suites, en `frontend/e2e/`. Traducción al stack (la guía usa .NET y una app de
+tareas; acá es Node y un inventario de equipos):
+
+| Pide la guía | En CampusGear |
+|---|---|
+| pedidos a la api desplegada, sin navegador | `e2e/api.spec.js` con el fixture `request` de Playwright |
+| flujos de navegador | `e2e/equipos.spec.js` |
+| crear → ver → borrar la tarea | crear → ver → eliminar un **equipo** |
+| `getByLabel('Título…')` | `getByLabel('Nombre')`, `'Categoría'`, `'Código'` (los `<label>` envuelven los inputs) |
+| `aria-label` «Borrar X» por fila | `aria-label="Eliminar <nombre>"` y `"Editar <nombre>"` por fila |
+| `role="alert"` en el error | ya existía en `StateMessage` |
+| `vitest` no debe tocar los specs | `exclude: [..., 'e2e/**']` en `vite.config.ts` (ya estaba desde el TP5) |
+
+**Tres pruebas de integración (API, sin navegador):** (1) crear un equipo lo muestra en la lista y
+borrarlo lo saca; (2) un equipo sin nombre se rechaza con 400 y no se crea nada; (3) un código duplicado
+se rechaza con 409 y el original no se pisa. **Tres flujos de navegador:** (1) crear → ver → eliminar;
+(2) un código repetido muestra la alerta al usuario y no crea un segundo equipo; (3) lo creado sigue
+ahí después de recargar (se guardó de verdad).
+
+**Una trampa propia de esta app: ninguna prueba crea préstamos.** La API no tiene `DELETE` de préstamos
+y la base los protege con `ON DELETE RESTRICT`: un préstamo creado no se puede limpiar, y bloquearía
+para siempre el borrado de su equipo y su persona. Por eso la tercera prueba de integración es «código
+duplicado» (crea un equipo y lo borra) y no un flujo de préstamo.
+
+**Cada prueba usa datos únicos** (`Date.now()` + azar) y limpia lo que crea. La limpieza la descubrí
+imperfecta **al romper la app a propósito** (mutación), y se corrigió dos veces:
+
+1. Con el botón *Eliminar* roto, los tres flujos de navegador fallaban —correcto— pero **dejaban tres
+   equipos huérfanos**, porque la limpieza pasaba por la misma pantalla rota. Ahora un `afterEach`
+   limpia **por la API**, pase lo que pase en la interfaz.
+2. En la prueba de integración 1, la aserción del `201` estaba antes del `try`: si fallaba, no se
+   limpiaba. Ahora todas las aserciones van adentro del `try/finally`.
+
+Además, un clic sobre un elemento que no existe tardaba 60 s en fallar; con `actionTimeout: 15 s` tarda
+15 s, que es lo que importa cuando un fallo bloquea una promoción.
+
+**Mutación (rompí la app y miré qué se ponía rojo):**
+
+| Rotura | Integración (API) | E2E (navegador) |
+|---|---|---|
+| El botón *Eliminar* pierde su nombre accesible | 3/3 verde | **3/3 rojo** |
+| `POST /api/equipos` responde 200 en vez de 201 | **1 rojo** (la de creación) | no se ejecutó |
+
+La primera fila es exactamente el caso que justifica tener las dos suites: la API está sana, la
+interfaz no, y sólo la e2e lo ve. En la Fase 32 se usa para demostrar que el gate frena la promoción.
+
+**Dónde se corre:** probado contra el `docker compose` local (los servicios de Render son compartidos y
+gastan horas gratuitas: se prueba primero en casa). La integración se apunta a la API de QA con
+`API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`; el pipeline las ejecuta en la Fase 32.

@@ -17,3 +17,7 @@ Thumbs.db
 
 # reportes de cobertura (se regeneran)
 coverage/
+
+# reportes de Playwright (se regeneran en cada corrida)
+playwright-report/
+test-results/
