@@ -92,7 +92,7 @@ export function EquipoForm({ equipoAEditar, onSubmit, onCancelar }: Props) {
       </div>
       <div className="form-actions">
         <button type="submit" className="btn btn-primary" disabled={enviando}>
-          {equipoAEditar ? "Guardar cambios" : "Crear equipo"}
+          {equipoAEditar ? "Guardar cambios" : "Guardar equipo"}
         </button>
         {equipoAEditar && (
           <button type="button" className="btn btn-secondary" onClick={onCancelar}>
