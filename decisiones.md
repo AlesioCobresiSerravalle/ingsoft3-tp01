@@ -1,6 +1,27 @@
 # Decisiones — CampusGear
 
-## Enlaces de este TP (TP6)
+## Enlaces de este TP (TP7)
+
+| Qué | Dónde |
+|---|---|
+| Repositorio | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01 |
+| Paquete backend (público) | https://github.com/users/AlesioCobresiSerravalle/packages/container/package/ingsoft3-tp01-backend |
+| Paquete frontend (público) | https://github.com/users/AlesioCobresiSerravalle/packages/container/package/ingsoft3-tp01-frontend |
+| **QA** (front / api) | https://campusgear-front-qa.onrender.com · https://campusgear-api-qa.onrender.com |
+| **PROD** (front / api) | https://campusgear-front-prod.onrender.com · https://campusgear-api-prod.onrender.com |
+| Workflow | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/.github/workflows/ci.yml |
+| Pruebas de integración (API) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/frontend/e2e/api.spec.js |
+| Pruebas e2e (navegador) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/frontend/e2e/equipos.spec.js |
+| **Corrida ROJA** (integración verde, e2e roja, PROD frenado; en la página de la corrida, sección *Artifacts*: `reporte-integracion` y `reporte-e2e`) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39313636832 |
+| **Corrida VERDE** (toda la cadena, aprobada y promovida a PROD) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236 |
+| PR que rompió la app a propósito | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/53 |
+| PR que la corrigió | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/54 |
+| PR de los entornos con imagen (`imgURL`) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/50 |
+| PR de las suites de Playwright | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/51 |
+| PR del gate de promoción | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/52 |
+| Release del TP6 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v6.0.0 |
+
+## Enlaces del TP6
 
 | Qué | Dónde |
 |---|---|
@@ -19,7 +40,7 @@
 | PR que agregó el deploy a QA y PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/47 |
 | Release del TP5 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v5.0.0 |
 
-Documento único y acumulativo: un bloque por TP (TP1 … TP6).
+Documento único y acumulativo: un bloque por TP (TP1 … TP7).
 
 # TP1 — Fundamentos y API
 
@@ -1152,3 +1173,76 @@ interfaz no, y sólo la e2e lo ve. En la Fase 32 se usa para demostrar que el ga
 **Dónde se corre:** probado contra el `docker compose` local (los servicios de Render son compartidos y
 gastan horas gratuitas: se prueba primero en casa). La integración se apunta a la API de QA con
 `API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`; el pipeline las ejecuta en la Fase 32.
+
+## El gate de promoción: la demostración
+
+La cadena de `main` es `build-* → deploy-qa → integracion → e2e → deploy-prod`. El gate **está en
+`needs`**, no en un `if`: si la integración o la e2e fallan, `deploy-prod` ni siquiera se alcanza ni pide
+aprobación. No hay `continue-on-error`, `|| true` ni `always()` en nada que decida el gate; la única
+excepción es la *subida del reporte* (`!cancelled()`), que existe justamente para tener el reporte
+cuando algo falla.
+
+**1. Rotura a propósito** ([PR #53](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/53)): cambié el texto del botón «Crear equipo» por «Guardar
+equipo». Compila, los 28 tests unitarios pasan y la API no se tocó, así que se mergeó sin que nada se
+pusiera rojo. **Corrida roja:**
+[https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39313636832](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39313636832)
+
+| Job | Resultado |
+|---|---|
+| build-backend / build-frontend | verde |
+| deploy-qa | verde (QA recibió la imagen rota) |
+| **integracion** | **verde**: la API estaba sana |
+| **e2e** | **rojo**: el navegador no encuentra el botón |
+| deploy-prod | **salteado**: no se pidió aprobación |
+
+Cada suite subió su propio reporte: `reporte-integracion` (196 KB) y `reporte-e2e` (2,8 MB, con las
+capturas del fallo). **Comprobación por fuera del pipeline:** el front de QA servía «Guardar equipo» y el
+de PROD seguía sirviendo «Crear equipo». La versión rota llegó a QA y nunca a producción.
+
+**2. Corrección** ([PR #54](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/54)): revertí el cambio. **Corrida verde:**
+[https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236). La integración y la e2e pasaron, el job de
+PROD quedó esperando y lo aprobé. Después de eso, el front de QA y el de PROD sirven **el mismo archivo
+JavaScript** (`index-BfBqAaE1.js`): lo que probó la e2e en QA es lo que corre en PROD, no una segunda
+construcción.
+
+**Por qué este tipo de rotura.** Es el caso que justifica tener las dos suites: la API está bien y la
+interfaz no. La integración sola habría dejado pasar el cambio; sólo la e2e, que maneja un navegador, lo
+ve. Y a la inversa, la e2e sola no distingue si el problema está en la API o en la pantalla: las dos
+juntas acotan dónde mirar.
+
+## Construir una vez, desplegar muchas
+
+La unidad de entrega es **la imagen**, y se construye **una sola vez**, en el job de build, el mismo que
+corre los tests. De ahí en adelante sólo viaja su etiqueta:
+
+- `ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-{backend,frontend}:sha-<commit>`: QA y PROD
+  ejecutan **la misma imagen**; lo único que las distingue es la configuración por entorno
+  (`DATABASE_URL`, `BACKEND_URL`, `DNS_RESOLVER`), que está **fuera** de la imagen (TP6).
+- Los hooks de Render llevan `imgURL=<imagen>:sha-<commit>`. Render ya no compila: descarga y arranca.
+  Efecto medido: la api de QA pasó de 24 a 43 s por deploy (reconstruyendo) a **10,3 s** (ejecutando).
+- **Etiquetas:** `sha-<commit>` identifica qué código produjo cada imagen; no existe `latest`, porque una
+  etiqueta que se mueve no dice qué se verificó.
+- **De la release a la imagen:** el tag `vN.0.0` del repositorio es un hito del curso y apunta a un
+  commit; ese commit tiene su imagen `sha-<commit>` en los dos paquetes. Release → commit → imagen es una
+  cadena de una sola dirección y sin ambigüedad. `v7.0.0` va sobre el commit que **está en PROD**.
+
+## Qué NO prueba el smoke test
+
+El smoke test comprueba que el entorno **responde**: la API, la base, el front y el proxy. No prueba que
+esté ejecutando **tu imagen**: si un deploy fallara, el servicio seguiría sirviendo la versión anterior y
+el smoke daría verde igual. Por eso la evidencia de qué corre es *Events* de cada servicio en Render, que
+para cada deploy dice «Triggered via Deploy Hook» y nombra el `sha-<commit>` de la corrida. Cerrar ese
+hueco automáticamente (que `/health` devuelva el commit y el smoke lo compare) queda como mejora y no se
+implementó.
+
+Un riesgo relacionado, propio de Render: **no usar *Manual Deploy***. Despliega la imagen de *Settings*
+(la que pegué una vez como punto de partida), no la que está corriendo, y puede llevar un entorno hacia
+atrás sin avisar.
+
+## Declaración de uso de IA (TP7)
+
+Usé Claude Code para escribir las suites de Playwright, el workflow del gate y las explicaciones.
+Lo que hice yo: cambiar la fuente de los cuatro servicios de Render a imagen, aprobar las promociones
+(incluida la que decidía qué llegaba a producción) y mirar *Events* de cada servicio. La IA encontró,
+rompiendo la app a propósito, dos defectos de limpieza en mis propias pruebas (dejaban equipos de prueba
+sin borrar cuando fallaban); se corrigieron antes de usarlas contra QA.
