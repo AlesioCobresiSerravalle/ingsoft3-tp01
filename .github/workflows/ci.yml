@@ -190,18 +190,23 @@ jobs:
           done
           exit 1
 
-      - name: Desplegar en QA el commit de esta corrida (api + front)
+      - name: Desplegar en QA la IMAGEN del commit (api + front)
         shell: bash
         env:
           HOOK_API: ${{ secrets.RENDER_HOOK_BACKEND }}
           HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONTEND }}
         run: |
-          # `ref` le dice a Render QUÉ commit construir. La URL del hook va última:
-          # es el único argumento suelto y --data-urlencode se lleva el valor
-          # que tiene al lado. Los secrets no se imprimen.
-          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_API" > /dev/null
-          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_FRONT" > /dev/null
-          echo "Deploy de $GITHUB_SHA disparado en api y front de QA"
+          # `imgURL` le dice a Render QUÉ IMAGEN ejecutar: la que este mismo
+          # pipeline construyó, probó y publicó para este commit. Render ya no
+          # construye nada. --get --data-urlencode lo agrega a la URL del hook
+          # (que ya trae ?key=...) y le codifica los ':' y '/'. La URL del hook
+          # va ÚLTIMA: es el único argumento suelto y --data-urlencode se lleva
+          # el valor que tiene al lado. Los secrets no se imprimen.
+          IMG_API="ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-backend:sha-$GITHUB_SHA"
+          IMG_FRONT="ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-frontend:sha-$GITHUB_SHA"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_API" "$HOOK_API" > /dev/null
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_FRONT" "$HOOK_FRONT" > /dev/null
+          echo "Imagen sha-$GITHUB_SHA desplegada en api y front de QA"
 
       - name: Smoke test (espera a que QA responda)
         shell: bash
@@ -265,18 +270,23 @@ jobs:
           done
           exit 1
 
-      - name: Desplegar en PROD el commit de esta corrida (api + front)
+      - name: Desplegar en PROD la IMAGEN del commit (api + front)
         shell: bash
         env:
           HOOK_API: ${{ secrets.RENDER_HOOK_BACKEND }}
           HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONTEND }}
         run: |
-          # `ref` le dice a Render QUÉ commit construir. La URL del hook va última:
-          # es el único argumento suelto y --data-urlencode se lleva el valor
-          # que tiene al lado. Los secrets no se imprimen.
-          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_API" > /dev/null
-          curl -fsS --max-time 30 --get --data-urlencode "ref=$GITHUB_SHA" "$HOOK_FRONT" > /dev/null
-          echo "Deploy de $GITHUB_SHA disparado en api y front de PROD"
+          # `imgURL` le dice a Render QUÉ IMAGEN ejecutar: la que este mismo
+          # pipeline construyó, probó y publicó para este commit. Render ya no
+          # construye nada. --get --data-urlencode lo agrega a la URL del hook
+          # (que ya trae ?key=...) y le codifica los ':' y '/'. La URL del hook
+          # va ÚLTIMA: es el único argumento suelto y --data-urlencode se lleva
+          # el valor que tiene al lado. Los secrets no se imprimen.
+          IMG_API="ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-backend:sha-$GITHUB_SHA"
+          IMG_FRONT="ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-frontend:sha-$GITHUB_SHA"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_API" "$HOOK_API" > /dev/null
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_FRONT" "$HOOK_FRONT" > /dev/null
+          echo "Imagen sha-$GITHUB_SHA desplegada en api y front de PROD"
 
       - name: Smoke test (espera a que PROD responda)
         shell: bash
