@@ -22,7 +22,8 @@ provider "render" {} # RENDER_API_KEY y RENDER_OWNER_ID
 # entero sin rozar QA ni producción.
 
 resource "neon_project" "preprod" {
-  name = "campusgear-preprod"
+  name   = "campusgear-preprod"
+  org_id = var.neon_org_id
 
   # Sin esta línea el primer apply falla: el provider pide por defecto un día de
   # historial (86400 s) y el tope del plan gratuito es seis horas (21600 s).
