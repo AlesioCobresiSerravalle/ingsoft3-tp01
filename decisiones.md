@@ -40,7 +40,7 @@
 | PR que agregó el deploy a QA y PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/47 |
 | Release del TP5 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v5.0.0 |
 
-Documento único y acumulativo: un bloque por TP (TP1 … TP7).
+Documento único y acumulativo: un bloque por TP (TP1 … TP8).
 
 # TP1 — Fundamentos y API
 
@@ -1246,3 +1246,97 @@ Lo que hice yo: cambiar la fuente de los cuatro servicios de Render a imagen, ap
 (incluida la que decidía qué llegaba a producción) y mirar *Events* de cada servicio. La IA encontró,
 rompiendo la app a propósito, dos defectos de limpieza en mis propias pruebas (dejaban equipos de prueba
 sin borrar cuando fallaban); se corrigieron antes de usarlas contra QA.
+
+# TP8 — Infraestructura como código
+
+## Riel, herramientas y versiones
+
+Riel canónico: **Terraform + Neon + Render**, los mismos proveedores que uso desde el TP6. Se declara un
+entorno **nuevo, `preprod`** (base de Neon + api y front en Render, corriendo la imagen del pipeline) que
+**convive** con QA y producción sin tocarlos: no se importaron, no se migraron, ningún plan los menciona.
+
+| Pieza | Versión | Nota |
+|---|---|---|
+| Terraform | **1.16.6** (`darwin_amd64`) | binario oficial de HashiCorp con el SHA256 verificado: `brew` no pudo instalarlo en mi Mac Intel (las Command Line Tools no coinciden con mi macOS) |
+| `kislerdm/neon` | **0.18.0** | fijada: su repositorio está archivado y los nombres de atributos cambian entre versiones; el oficial (`neondatabase/neon`) todavía no existe en el registro |
+| `render-oss/render` | **1.9.1** | fijada |
+| `terraform_data` + `local-exec` | integrado | corre la migración del esquema (ver abajo) |
+
+El `.terraform.lock.hcl` **se commitea** (fija versión y hashes de los providers). El estado
+(`terraform.tfstate`), `.terraform/` y los `*.tfvars` están en el `.gitignore` **desde antes del primer
+apply**. Ninguna credencial está escrita en el HCL: `NEON_API_KEY`, `RENDER_API_KEY` y `RENDER_OWNER_ID`
+las leen los providers del entorno de mi terminal.
+
+## Qué se declara y qué se deriva
+
+- `neon_project` (propio de preprod, con `history_retention_seconds = 21600`, el tope del plan gratuito),
+  `neon_role` y `neon_database`. Un proyecto aparte se puede destruir entero sin rozar QA ni producción.
+- **La `DATABASE_URL` se deriva**, no se copia: se arma con el rol, la contraseña (con `urlencode`), el host
+  y la base que devuelve Neon. Es una URI de Prisma (`postgresql://…?sslmode=require`), no la cadena de pares
+  de la guía (.NET). Copiar la de otro entorno fue el error más caro del TP6; acá no hay nada que copiar.
+- **La `BACKEND_URL` del front se deriva** del atributo `url` de **su** api (con `trimsuffix` para evitar la
+  barra final). El front además lleva `DNS_RESOLVER=8.8.8.8` y `PORT=80`: mi nginx escucha en el 80 y Render
+  espera el 10000 por defecto.
+- Los servicios usan `runtime_source.image` con `image_url` **sin** la etiqueta y `tag` aparte
+  (`sha-a95fc1ee…`, un merge a `main` con imágenes publicadas). Sin `latest`.
+- **El esquema:** una base nueva nace vacía y mi backend no crea las tablas al arrancar (usa migraciones de
+  Prisma y la imagen no trae el CLI). Terraform crea **la base, no el esquema**; para que un solo `apply` deje
+  el entorno funcionando, un `terraform_data` con `local-exec` corre `prisma migrate deploy` apenas existe la
+  base, y se **vuelve a correr si la base se recrea** (`triggers_replace`). Es un *provisioner*, que Terraform
+  considera último recurso, y deja una dependencia: el CLI de Prisma tiene que estar en la máquina que aplica.
+
+## Lo que hice y lo que vi
+
+- **Idempotencia:** el segundo `plan` dijo `No changes`.
+- **Drift:** borré a mano la base en Neon y el `plan` lo detectó (`neon_database.preprod has been deleted`).
+  El plan propuso `2 to add, 1 to destroy`, no uno solo: la migración depende del id de la base, y como la
+  nueva tiene otro id, Terraform la marcó `# forces replacement` y la volvió a correr. Es lo correcto: una
+  base recién creada está vacía. Después de `apply` la API volvió a responder con sus tablas. Creé a mano una
+  `base_intrusa` que mi código no declara y el plan siguió diciendo `No changes`: Terraform vigila lo que
+  declaré, no todo lo que existe (el mismo caso de mis QA y PROD, que ningún plan mío menciona).
+- **Ciclo de vida:** `destroy` baja preprod entero y `apply` lo trae de vuelta con la API, la base (con
+  tablas) y el frontend respondiendo. QA y PROD siguieron respondiendo en todo momento. Los ids de Neon
+  cambiaron al recrearlo (`still-bird-…` → `royal-wind-…`), señal de que se recreó de verdad.
+- **`prevent_destroy`:** con el bloque en la base, `terraform destroy` se negó (`Instance cannot be
+  destroyed`) y nombró el recurso. Lo saqué después: preprod tiene que poder morir. Protege contra un destroy
+  accidental, pero no contra borrar el bloque del código; la protección real es el PR revisado más un backup.
+  Iría en una base de producción, no en preprod, que nace vacía y se llena sola.
+
+## Estado, cuota y lo que sigue siendo artesanal
+
+- **El estado vive en mi máquina** y tiene contraseñas en texto plano: por eso no se commitea. Si lo pierdo no
+  pierdo la infraestructura sino la prueba de que es mía: el próximo `plan` propondría crearlo todo de nuevo
+  contra recursos que ya existen, y habría que importarlos. Para que lo comparta un equipo (o una corrida del
+  pipeline) tendría que mudarse a un *backend* remoto con bloqueo.
+- **Las 750 horas gratuitas de Render son del workspace**, compartidas entre todos los servicios gratuitos: con
+  preprod pasan de 4 a 6. Si me paso, Render suspende todos, producción incluida. Por eso preprod se destruye al
+  terminar cada sesión; es un entorno que existe cuando se lo necesita.
+- **Sigue siendo artesanal** en mi cuenta: QA y PROD (los cuatro servicios y las dos bases se crearon clickeando,
+  y un plan limpio no dice nada de ellos), los deploy hooks (el provider de Render no los expone) y el estado
+  local. Y Render no deja *modificar* un servicio `free` (defecto del provider), así que en preprod se crea y se
+  destruye, nunca se edita.
+- **El workflow `infra.yml`** (opcional) corre `fmt` y `validate` en cada PR que toca `infra/`, **sin
+  credenciales**. No corre `plan`: necesitaría las claves como secrets (la de Render da acceso a todo el
+  workspace, QA y PROD incluidos, y un repo público guardaría esa clave) y además el estado compartido; el
+  `apply` lo hago yo desde mi terminal.
+
+## Problemas que tuve y cómo los resolví
+
+1. **`brew install` falló** (Mac Intel con Command Line Tools desactualizadas): instalé el binario oficial en
+   `~/bin`, verificando el hash antes.
+2. **`org_id is required`:** las cuentas nuevas de Neon pertenecen a una organización y la API exige indicarla.
+   Lo agregué como variable sin default (`TF_VAR_neon_org_id`). No es una credencial pero es propia de la cuenta.
+3. **`org_id` con un salto de línea**, por haber cerrado mal las comillas en el `export`: se veía como un bloque
+   `<<-EOT` en el `plan` *antes* de tocar nada. Lo corregí en el código con `trimspace`.
+4. **El esquema de una base nueva** (ver arriba) y el `PORT=80` del front, que la guía no necesitaba.
+5. **Dos veces se me coló un valor sensible en lo que copiaba de la terminal** (una clave en un mensaje): lo
+   traté como filtrado. Regla desde entonces: pegar solo desde `terraform plan`, nunca las líneas con `export`.
+
+## Declaración de uso de IA (TP8)
+
+Usé Claude Code para escribir el HCL, el workflow y los textos. Lo que hice yo: crear las claves, exportarlas en
+mi terminal, correr `plan`, `apply` y `destroy`, borrar y crear cosas a mano en las consolas de Neon y Render
+para provocar el drift, y leer cada plan antes de aplicarlo. La IA no tuvo acceso a mis claves ni corrió
+Terraform contra mis cuentas: comprobó desde afuera (`curl` a `/health`, a un endpoint que toca la base y al
+proxy del front) que el entorno quedó funcionando, y revisé yo la salida de cada comando.
+

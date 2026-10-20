@@ -25,3 +25,11 @@ reporte-integracion/
 reporte-e2e/
 resultados-integracion/
 resultados-e2e/
+
+# Terraform: el ESTADO guarda contraseñas en texto plano. Jamás al repositorio.
+# (El .terraform.lock.hcl SÍ se commitea: fija las versiones y los hashes de los providers.)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+crash.log
