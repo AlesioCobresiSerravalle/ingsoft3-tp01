@@ -1,5 +1,5 @@
 # ---- Etapa 1: build (con el SDK completo de Node) ----
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 # Capa cacheable: solo se rehace si cambian las dependencias, no el código.
@@ -26,7 +26,7 @@ COPY vitest.config.mts ./
 CMD ["npx", "vitest", "run", "--coverage", "--coverage.reportsDirectory=/reports", "--coverage.clean=false"]
 
 # ---- Etapa 2: runtime (imagen mínima, sin herramientas de compilación) ----
-FROM node:22-alpine AS final
+FROM node:26-alpine AS final
 LABEL org.opencontainers.image.source="https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01"
 WORKDIR /app
 ENV NODE_ENV=production
