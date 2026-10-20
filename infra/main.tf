@@ -23,7 +23,7 @@ provider "render" {} # RENDER_API_KEY y RENDER_OWNER_ID
 
 resource "neon_project" "preprod" {
   name   = "campusgear-preprod"
-  org_id = var.neon_org_id
+  org_id = trimspace(var.neon_org_id) # por si el export trae un salto de línea o espacios
 
   # Sin esta línea el primer apply falla: el provider pide por defecto un día de
   # historial (86400 s) y el tope del plan gratuito es seis horas (21600 s).
