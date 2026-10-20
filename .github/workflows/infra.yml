@@ -1,0 +1,30 @@
+name: Infra
+
+# Verifica el código de infra/ en cada PR que lo toca. No necesita credenciales:
+# `fmt` y `validate` analizan los archivos, no hablan con Neon ni con Render. El
+# `plan` real sí las necesitaría (y el estado vive en la máquina de quien aplica),
+# por eso no corre acá: el `apply` lo hace una persona desde su terminal.
+on:
+  pull_request:
+    paths: ["infra/**"]
+  workflow_dispatch:
+
+jobs:
+  infra-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Formato
+        run: terraform -chdir=infra fmt -check
+
+      - name: Init (sin backend) y validate
+        run: |
+          terraform -chdir=infra init -backend=false
+          terraform -chdir=infra validate
