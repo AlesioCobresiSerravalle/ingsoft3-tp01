@@ -14,6 +14,7 @@ export default defineConfig({
       exclude: [
         "src/**/*.test.ts",
         "src/server.ts", // arranque: app.listen
+        "src/instrument.ts", // arranque: configuración de Sentry, sin lógica propia
         "src/app.ts", // cableado de middlewares y rutas
         "src/config/env.ts", // lectura de process.env
         "src/lib/prisma.ts", // instancia del cliente

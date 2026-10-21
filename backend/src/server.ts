@@ -1,3 +1,4 @@
+import "./instrument"; // primero: Sentry tiene que engancharse antes de cargar Express
 import { app } from "./app";
 import { env } from "./config/env";
 
