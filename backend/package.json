@@ -12,7 +12,7 @@
     "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "^7.10.1",
     "@sentry/node": "^11.8.0",
     "express": "^5.1.0",
     "zod": "^3.24.0"
