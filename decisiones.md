@@ -1,6 +1,20 @@
 # Decisiones — CampusGear
 
-## Enlaces de este TP (TP7)
+## Enlaces de este TP (TP9)
+
+| Qué | Dónde |
+|---|---|
+| Alertas de Dependabot, CodeQL y protección de secretos | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/security |
+| PR de Dependabot mergeado (`proxy-addr` 2.0.7 → 2.0.8) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/59 |
+| Configuración de Dependabot | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/.github/dependabot.yml |
+| Demo de CodeQL (3 hallazgos; cerrada, nunca mergeada) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/73 |
+| Sentry en backend y frontend (PR) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/74 |
+| Tarjeta del tablero nacida de un dato de Sentry | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75 |
+| Postmortem sin culpables | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/postmortem.md |
+| Corrida que llevó el parche de `proxy-addr` a PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39470387567 |
+| Release del TP8 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v8.0.0 |
+
+## Enlaces del TP7
 
 | Qué | Dónde |
 |---|---|
@@ -40,7 +54,7 @@
 | PR que agregó el deploy a QA y PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/47 |
 | Release del TP5 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v5.0.0 |
 
-Documento único y acumulativo: un bloque por TP (TP1 … TP8).
+Documento único y acumulativo: un bloque por TP (TP1 … TP9).
 
 # TP1 — Fundamentos y API
 
@@ -1339,4 +1353,135 @@ mi terminal, correr `plan`, `apply` y `destroy`, borrar y crear cosas a mano en 
 para provocar el drift, y leer cada plan antes de aplicarlo. La IA no tuvo acceso a mis claves ni corrió
 Terraform contra mis cuentas: comprobó desde afuera (`curl` a `/health`, a un endpoint que toca la base y al
 proxy del front) que el entorno quedó funcionando, y revisé yo la salida de cada comando.
+
+# TP9 — DevSecOps y observabilidad
+
+## Dependencias: el PR de Dependabot que mergeé
+
+Dependabot quedó activo en cinco lugares (`npm` del backend y del frontend, las GitHub Actions y las imágenes base de
+los dos Dockerfiles), con las **alertas** y las **actualizaciones de seguridad** prendidas. A los pocos minutos del
+merge abrió PRs; los dos primeros arreglaban vulnerabilidades publicadas, no eran versiones rutinarias.
+
+**Mergeé el [#59](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/59): `proxy-addr` de 2.0.7 a 2.0.8, en `/backend`.**
+- **Qué es:** un cambio de **patch** (SemVer: solo arreglos) que toca únicamente `package-lock.json`, ni una línea
+  de mi código. La dependencia no la escribí yo: la trae Express (`express@5.2.1 → proxy-addr`), que es justo el
+  punto de la guía: casi todo lo que mi backend ejecuta no lo escribí.
+- **Por qué importaba:** arreglaba GHSA-jqcg-44mw-7w3h (CVE-2026-90711), suplantación de IP por una subred IPv4
+  mapeada en IPv6, severidad **crítica** (CVSS 9.1) y de **runtime**.
+- **¿Era explotable en CampusGear? No.** Revisé el código del backend: no usa `trust proxy`, ni `req.ip`, ni
+  cabeceras `x-forwarded`. Esa falla solo importa cuando una app confía en la IP que declara el cliente. Se
+  actualizó igual, porque no cuesta nada y evita que un cambio futuro la vuelva explotable.
+- **Por qué me animé a mergearlo:** un patch que solo cambia el lockfile, con changelog que solo menciona el
+  arreglo, y con **mi pipeline en verde sobre ese PR**: los 32 tests, el umbral de cobertura, las imágenes, y la
+  integración y la e2e en QA. Ese verde es todo el semestre diciéndome «podés». Sin esa red, un update de
+  dependencia da miedo y se posterga.
+- **Resultado:** la alerta crítica pasó a `fixed` sola al aparecer `proxy-addr 2.0.8` en `main`.
+- **Los mayores no se mergean a ciegas:** `prisma 7/8`, `zod 4` y `typescript 7` quedan para analizarse con
+  calma, porque pueden traer cambios incompatibles.
+- **Una nota de honestidad:** antes de esto `npm audit` me daba 0 vulnerabilidades; las publicaron después.
+  El estado de seguridad cambia aunque mi código no.
+
+## Mi código, escaneado, y los secretos con guardia
+
+- **CodeQL activo** (configuración por defecto, JavaScript/TypeScript y workflows de Actions), con el primer análisis
+  en verde y **0 alertas** en `main`. Corre en cada PR y push.
+- Como mi app está limpia, **provoqué hallazgos** en una rama que nunca se mergea ([PR #73](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/73), cerrado):
+  un XSS reflejado, una inyección de comandos y la falta de *rate limiting*. CodeQL los cazó en el PR
+  (`3 new alerts including 1 critical`) y el umbral de cobertura frenó el mismo código por su lado: dos
+  guardianes distintos. Ninguno de mis tests los habría visto, porque ningún test escribe `?host=; …`; CodeQL
+  sigue el dato desde `req.query` hasta `exec` sin ejecutar nada.
+- **Secret scanning y push protection** ya estaban activos en el repositorio público (verificado). La demo del
+  push bloqueado con un token sin permisos es práctica recomendada y **no la hice**. Lo que esa protección **no**
+  detecta: un secreto inventado o en un formato que no conoce; por eso el arco de capas anteriores (`.env`
+  ignorado, secrets cifrados y por entorno) sigue importando.
+
+## Monitoreo externo y la caída provocada
+
+Monitor de UptimeRobot sobre el `/health` de PROD (el plan gratuito pregunta con `HEAD`; comprobé que mi endpoint
+responde 200 a `HEAD`, Express lo hace solo). Provoqué una caída suspendiendo el servicio de la api de PROD en Render
+(20/10):
+
+| Evento | Hora local |
+|---|---|
+| Suspendí el servicio | 23:00 |
+| Mi observador ve el primer 503 | 23:00:37 |
+| **Aviso DOWN del monitor** | **23:02** |
+| `/health` vuelve a dar 200 | 23:03:01 |
+| Aviso UP del monitor | 23:03 |
+
+**Tiempo de detección: ~2 minutos** (con chequeos cada 5 minutos el peor caso sería 5); caída de ~2 minutos y medio.
+Abrir `/health` yo mismo después de reanudar lo despertó; sin eso el UP puede tardar más de 20 minutos. **Es externo**
+porque si mi infraestructura se cae, un monitoreo interno se cae con ella; sin él, la caída la habría anunciado un
+usuario. **La regla:** el monitor se pausa al terminar el ejercicio, porque un servicio gratuito despierto todo el mes
+consume las 750 horas del workspace y, si se pasan, Render suspende todos los servicios, producción incluida.
+
+## Qué falla, qué tarda y qué se usa (Sentry)
+
+Sentry en el backend (`@sentry/node`, inicializado antes de Express; el DSN llega por `SENTRY_DSN`, apagado si falta)
+y en el frontend (`@sentry/react`; el DSN va escrito en el código porque en un front **no es un secreto**: solo
+permite enviar datos, no leerlos, y viaja en el JavaScript que baja cualquier navegador). Subido por [PR #74](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/74)
+y desplegado por la cadena completa. Coste visible: el bundle del frontend pasó de ~243 kB a ~401 kB.
+
+- **Un error:** `Error: Falla de prueba del TP9` (`CAMPUSGEAR-BACKEND-1`, `GET /api/falla`, `environment: production`),
+  de un endpoint temporal que agregué y saqué por otro PR.
+- **Mi uso real** (tabla *Traces → Aggregates*, últimas 24 h, pedidos completos):
+
+| Operación | Pedidos | p95 |
+|---|---|---|
+| `GET /api/equipos` — **la más usada** | 12 | 17,82 ms |
+| `GET /api/dashboard/resumen` — **la más lenta** | 9 | **905,05 ms** |
+| `GET /api/prestamos` | 6 | 44,60 ms |
+| `GET /api/personas` | 5 | 196,90 ms |
+| `PATCH /api/equipos/:id` | 2 | 253,03 ms |
+
+- **Por qué el dashboard es lo más lento:** es la página de inicio, así que suele ser el primer pedido tras un rato
+  sin uso y paga el arranque en frío de la base gratuita (Neon la suspende a los 5 minutos); con solo 9 pedidos el p95 es
+  casi el máximo. Además `obtenerResumen` hace dos consultas en serie que no dependen entre sí.
+- **Lo que Sentry me dice que el monitor no:** el monitor solo responde «¿estás viva?»; Sentry me dice qué falla,
+  qué tarda, y cuánto se usa cada cosa.
+- **La tarjeta:** [#75](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75) en mi tablero, con el número adentro, nacida de ese dato (feedback: lo que
+  pasa en producción decide qué se hace después).
+
+## Mis cuatro métricas DORA (práctica recomendada)
+
+Con el historial real de `main`, desde que el pipeline tiene `deploy-prod` (12/10), aproximadas:
+
+| Métrica | Resultado | Cómo |
+|---|---|---|
+| Frecuencia de despliegue | **9 despliegues a PROD en 10,8 días** (0,83/día) | corridas de `main` con `deploy-prod: success` |
+| Lead time (merge → PROD) | mediana **6 min**; mínimo 3 min; máximo 26 h 42 min | commit de merge contra el fin de `deploy-prod`; el máximo es **espera de mi aprobación**, no lentitud del pipeline. No incluye el tiempo de escribir el código |
+| Tasa de fallo | **1 de 9 ≈ 11 %** | el despliegue de Sentry (ver `postmortem.md`) |
+| Tiempo de recuperación | **28,5 s** (rollback por commit del TP6); ~10 min en el incidente de Sentry; ~2 min de detección de la caída provocada | mis cronometrajes |
+
+El gate además evitó un fallo en producción (la rotura del botón se frenó en QA) y cinco corridas no llegaron a PROD
+(dos rechazadas, dos canceladas, una salteada por la e2e roja). La métrica que movería primero es la **tasa de fallo**,
+y la pieza que la mueve es un smoke que compruebe la **versión** que corre, no solo que responde (acción 1 del postmortem).
+
+## Postmortem sin culpables
+
+[`postmortem.md`](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/postmortem.md): un despliegue «exitoso» dejó ~10 minutos a producción con Sentry
+apagado y el frontend sirviendo el bundle anterior. Causa de **sistema**: una configuración manual que nada exigía
+y un pipeline que no verifica qué versión corre. Una hipótesis inicial (un despliegue manual de la imagen vieja) se
+descartó con los eventos de Render; la causa del frontend desfasado queda **sin determinar** y está dicho.
+
+## Problemas que tuve
+
+1. **`SENTRY_DSN` sin cargar en PROD:** el backend desplegó con Sentry apagado y no mostraba datos (ver postmortem).
+2. **El frontend de PROD no sirvió el bundle nuevo a los ~4 minutos del despliegue «exitoso»**, causa no determinada.
+3. **Una aprobación de PROD olvidada** de un PR anterior retuvo el grupo de `concurrency` y dejó en cola la corrida
+   siguiente; se resolvió rechazando la vieja y aprobando la nueva.
+4. **Se me coló una clave de Render en un mensaje al asistente** durante el TP8 (la traté como filtrada: hay que
+   revocarla y reemplazarla).
+5. La interfaz de Sentry no coincidía con la de la guía (*Insights → Backend* no existía): encontré las tablas en
+   *Explore → Traces*.
+
+## Declaración de uso de IA (TP9)
+
+Usé Claude Code para escribir la configuración de Dependabot, el código de Sentry, el endpoint temporal, el
+postmortem, esta sección y para consultar la API de GitHub. Lo que hice yo, en cada consola: crear las cuentas y
+los proyectos de UptimeRobot y Sentry, cargar las variables en Render, suspender y reanudar el servicio, aprobar
+cada despliegue a producción, usar la aplicación para generar los datos y borrar el sprint/tarjeta. Cómo lo verifiqué:
+cada cambio pasó mi pipeline completo; comprobé los hechos desde afuera con `curl` (bundle servido, endpoint
+removido) y contra los eventos de Render y de GitHub, y descarté una hipótesis del asistente (un despliegue manual)
+cuando los eventos la contradijeron. Puedo mostrar funcionando cada pieza y explicar qué mira y qué no.
 
