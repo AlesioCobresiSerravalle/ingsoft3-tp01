@@ -1480,7 +1480,7 @@ descartó con los eventos de Render; la causa del frontend desfasado queda **sin
 Usé Claude Code para escribir la configuración de Dependabot, el código de Sentry, el endpoint temporal, el
 postmortem, esta sección y para consultar la API de GitHub. Lo que hice yo, en cada consola: crear las cuentas y
 los proyectos de UptimeRobot y Sentry, cargar las variables en Render, suspender y reanudar el servicio, aprobar
-cada despliegue a producción, usar la aplicación para generar los datos y borrar el sprint/tarjeta. Cómo lo verifiqué:
+cada despliegue a producción, usar la aplicación para generar los datos y crear el sprint del tablero. Cómo lo verifiqué:
 cada cambio pasó mi pipeline completo; comprobé los hechos desde afuera con `curl` (bundle servido, endpoint
 removido) y contra los eventos de Render y de GitHub, y descarté una hipótesis del asistente (un despliegue manual)
 cuando los eventos la contradijeron. Puedo mostrar funcionando cada pieza y explicar qué mira y qué no.
