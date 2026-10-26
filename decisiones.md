@@ -1584,8 +1584,7 @@ PRs, releases): no se tocó ninguno.
 - Dependabot (5 ecosistemas), alertas y security updates, secret scanning y push protection activos; CodeQL
   configurado, último análisis sin error.
 - El PR #59 corre sólo `build-backend` y `build-frontend`; las demás etapas se omiten en PR (ver TP9).
-- QA y PROD no tenían préstamos activos al migrar (lectura `GET /api/prestamos?estado=activo`, 0 en ambos): la
-  nueva migración no choca con datos existentes.
+- Al consultar QA y PROD, ambos devolvieron 0 préstamos activos (`GET /api/prestamos?estado=activo`). La nueva migración todavía no se había aplicado en esos entornos.
 
 ## Qué se corrigió
 - **Código (problema real de concurrencia):** `crearPrestamo` permitía prestar el mismo equipo dos veces con
