@@ -9,7 +9,7 @@ la configuración de infraestructura y la primera redacción de este documento. 
 servicios las creé yo. Claude también ejecutó comandos y comprobaciones durante el desarrollo. Los
 resultados se documentan con los registros disponibles: código, reportes, corridas de GitHub Actions
 y datos de los servicios. Las aprobaciones y otras operaciones de las cuentas quedan registradas en
-las plataformas. También usé Codex para contrastar resultados de las pruebas y revisar la redacción.
+las plataformas.
 En cada TP se detalla el uso de IA y cómo se comprobó el resultado.
 
 **Índice:** [TP1](#tp1--fundamentos-y-api) · [Aplicación base](#aplicación-base--modelo-api-y-frontend) ·
