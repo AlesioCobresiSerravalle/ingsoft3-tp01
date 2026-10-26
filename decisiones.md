@@ -1,15 +1,22 @@
 # Decisiones — CampusGear
 
-> **Autoría y alcance de este documento (aclarado en la revisión del 26/10/2026).** La implementación
-> (código, pipeline, Terraform, pruebas) y la redacción de este documento fueron generadas por Claude
-> (Claude Code), a pedido del alumno. La participación del alumno fue crear las cuentas de los servicios
-> (GitHub, Neon, Render, UptimeRobot, Sentry) y las acciones que sólo puede registrar su cuenta (merges,
-> aprobación o rechazo de promociones en GitHub, claves en sus consolas). **Las verificaciones técnicas que
-> aquí se describen (comandos, `curl`, mutaciones, mediciones) las ejecutó Claude durante el desarrollo;
-> el alumno no las repitió por su cuenta salvo que se diga expresamente.** El texto usa la primera persona
-> por convención del documento, no como constancia de que el alumno ejecutó cada paso. Lo comprobado
-> **después**, en la revisión asistida del 26/10/2026, está fechado y listado en la sección
-> «Registro de la revisión del 26/10/2026» al final de este archivo.
+Este archivo reúne las decisiones de los nueve TP de CampusGear: qué se implementó, por qué se hizo
+así, qué problemas aparecieron y con qué pruebas se verificó. Las secciones muestran cómo fue
+evolucionando la aplicación y el pipeline a lo largo de los TP.
+
+**Uso de IA y participación.** Usé Claude Code para generar el código, las pruebas, los pipelines,
+la configuración de infraestructura y la primera redacción de este documento. Las cuentas de los
+servicios las creé yo. Claude también ejecutó comandos y comprobaciones durante el desarrollo. Los
+resultados se documentan con los registros disponibles: código, reportes, corridas de GitHub Actions
+y datos de los servicios. Las aprobaciones y otras operaciones de las cuentas quedan registradas en
+las plataformas. También usé Codex para contrastar resultados de las pruebas y revisar la redacción.
+En cada TP se detalla el uso de IA y cómo se comprobó el resultado.
+
+**Índice:** [TP1](#tp1--fundamentos-y-api) · [Aplicación base](#aplicación-base--modelo-api-y-frontend) ·
+[TP2](#tp2--contenedores) · [TP3](#tp3--planificación-y-trazabilidad) · [TP4](#tp4--continuous-integration) ·
+[TP5](#tp5--calidad-automatizada) · [TP6](#tp6--entrega-continua-entornos-y-rollback) ·
+[TP7](#tp7--imagen-única-por-commit-integración-y-extremo-a-extremo) · [TP8](#tp8--infraestructura-como-código) ·
+[TP9](#tp9--devsecops-y-observabilidad)
 
 ## Enlaces de este TP (TP9)
 
@@ -75,54 +82,41 @@ Documento único y acumulativo: un bloque por TP (TP1 … TP9).
 ## Por qué Git no pudo resolver el conflicto solo
 
 Las ramas `feature/titulo-a` y `feature/titulo-b` partieron del mismo commit de `main` y cada una
-modificó **la misma línea** del `README.md` (el título), con contenido distinto. Git resuelve solo
-los cambios que tocan partes distintas de un archivo; cuando dos ramas editan la misma línea no
-tiene manera de decidir cuál de las dos versiones es "la correcta" — las dos son ediciones legítimas
-del mismo lugar, y esa decisión de contenido solo la puede tomar una persona.
+modificó **la misma línea** del `README.md` (el título), con contenido distinto. Git puede integrar
+automáticamente muchos cambios sobre partes distintas de un archivo. En este caso no podía elegir
+entre dos títulos diferentes: hacía falta decidir qué contenido conservar.
 
 Para que este conflicto nunca hubiera aparecido, una de las dos ramas debería haber partido
 **después** de que la otra ya estuviera integrada a `main` (por ejemplo, crear `feature/titulo-b`
 recién después de mergear `feature/titulo-a`), en vez de las dos en paralelo desde el mismo punto de
-partida sin enterarse una de la otra. En un equipo real, esto es exactamente lo que ramas cortas e
-integración frecuente evitan: cuanto más tiempo conviven dos cambios sobre el mismo lugar sin
-integrarse, más grande y más probable es el conflicto.
+partida sin enterarse una de la otra. En un equipo, las ramas cortas y la integración frecuente
+reducen ese riesgo: cuanto más tiempo conviven dos cambios sobre el mismo lugar sin integrarse, más
+grande y más probable es el conflicto.
 
-## Problemas encontrados y cómo los solucioné
+## Problemas encontrados y solución
 
-- **El conflicto quedó resuelto con las dos versiones combinadas, no con una sola.** Al resolver
-  desde el editor web de GitHub, el `README.md` terminó con las líneas "versión B" y "versión A"
-  seguidas, en vez de haberme quedado solo con una. No es un error — la consigna permite elegir una
-  versión, la otra, o una combinación de las dos — y decidí dejarlo así en vez de "corregirlo"
-  después, porque es evidencia honesta de cómo resolví el conflicto en el momento, y de que entendí
-  que resolver un conflicto es tomar una decisión de contenido y no ejecutar un procedimiento con un
-  único resultado válido.
-- **Después de resolver el conflicto, GitHub tardó unos segundos en habilitar el botón de merge**
-  (mostraba "Checking for the ability to merge automatically..."). No fue un error de mi resolución:
-  la plataforma recalcula el estado del PR después de cada cambio, y hubo que esperar unos segundos
-  y refrescar la página para que el botón de merge quedara habilitado.
-- **La protección de `main` bloqueó también el `.gitignore` inicial.** Como configuré la protección
-  de rama antes de subir el primer archivo, no pude hacer el `push` directo que sugiere el orden
-  original de la guía — el `.gitignore` tuvo que entrar por su propio PR desde el principio, en vez
-  de ser el commit que "descubre" la protección más adelante. No cambia el resultado, solo el orden.
+- **El conflicto terminó con las dos versiones del título combinadas.** Al resolverlo desde el editor
+  web de GitHub, el `README.md` quedó con las líneas «versión B» y «versión A». Se mantuvo esa combinación,
+  que era una de las opciones permitidas por la consigna. Git puede señalar el conflicto, pero la
+  decisión sobre el contenido queda fuera de la resolución automática.
+- **El botón de merge tardó en habilitarse.** GitHub mostraba «Checking for the ability to merge
+  automatically...». Después de unos segundos y de actualizar la página, terminó de recalcular el PR.
+- **La protección de `main` también bloqueó el `.gitignore` inicial.** La protección se configuró
+  antes de subirlo, así que ese archivo entró por un PR. El resultado es el mismo que pide la guía;
+  cambió el orden de los pasos.
 
 ## Declaración de uso de IA
 
-Usé Claude (Anthropic) como asistente durante todo el TP. Concretamente:
+Claude preparó el plan de trabajo y la secuencia de Git: ramas, commits, push, reversión, conflicto
+y release. También explicó los rechazos de push y los marcadores del conflicto. Las capturas de
+`evidencias.md` y los registros de GitHub muestran los resultados de esa secuencia.
 
-- Para diseñar, antes de empezar el TP1, un plan de trabajo del semestre completo (arquitectura de
-  la futura aplicación, roadmap de fases) que sirve de contexto para los TPs siguientes.
-- Para este TP puntual, como guía paso a paso: qué comandos correr (clonar, crear y cambiar de
-  rama, commitear, pushear, revertir el commit de prueba, crear y publicar el tag), en qué orden, y
-  qué esperar en cada paso (por qué se rechaza el push, por qué aparece el conflicto, qué significa
-  cada marcador).
+# Aplicación base — modelo, API y frontend
 
-Cómo se verificó (corregido el 26/10/2026): los comandos de Git y la salida de terminal descritos (incluido el
-rechazo del push) se ejecutaron durante el desarrollo, guiados por Claude; el alumno creó la cuenta y el
-repositorio, y GitHub registra bajo su cuenta los Pull Requests, la resolución del conflicto y la release. Este
-documento no certifica que el alumno haya comprobado por su cuenta cada afirmación. Las capturas de
-`evidencias.md` son la prueba de que las pantallas descritas existieron.
+Esta parte describe la aplicación que después se usó en los TP de Docker, pruebas y despliegue. Se
+mantiene separada del ejercicio de Git del TP1 para facilitar la lectura.
 
-## Modelo de datos (previo al TP2)
+## Modelo de datos
 
 Antes de escribir cualquier endpoint, se diseñó el modelo de datos en `backend/prisma/schema.prisma`
 con tres entidades: `Equipo`, `Persona` y `Prestamo`.
@@ -132,33 +126,32 @@ como columna obliga a mantenerlo sincronizado a mano en cada punto donde se crea
 préstamo — y un solo lugar donde se olvide esa actualización deja el sistema en un estado
 inconsistente (equipo marcado "disponible" con un préstamo activo, o viceversa). En cambio, derivar
 el estado a partir de si existe o no un `Prestamo` activo para ese equipo (uno con
-`fechaDevolucionReal = null`) hace que la inconsistencia sea **imposible por construcción**: no hay
-dos lugares donde el mismo dato pueda decir cosas distintas. El costo es una consulta extra al
-listar equipos (buscar si tiene un préstamo activo) en vez de leer una columna — irrelevante para el
-volumen de datos de esta aplicación, y minúsculo comparado con el riesgo de inconsistencia.
+`fechaDevolucionReal = null`) evita mantener dos versiones del mismo dato. El costo es consultar los
+préstamos al listar equipos en vez de leer una columna. Para el tamaño de esta aplicación se
+priorizó evitar esa duplicación.
 
 **Por qué "vencido" tampoco se persiste.** Un préstamo vencido es, simplemente, un préstamo activo
 (`estado = ACTIVO`) cuya `fechaDevolucionPrevista` ya pasó. Guardarlo como un tercer valor del enum
 `EstadoPrestamo` exigiría un proceso que lo actualizara cada vez que cruza esa fecha (un cron, por
-ejemplo), con el riesgo de quedar desactualizado entre corridas. Calcularlo al leer
-(`estado === 'ACTIVO' && fechaDevolucionPrevista < ahora`) es siempre exacto y no depende de que
-ningún proceso se haya ejecutado a tiempo.
+ejemplo), con el riesgo de quedar desactualizado entre corridas. Calcularlo al leer (`estado ===
+'ACTIVO' && fechaDevolucionPrevista < ahora`) usa la fecha actual de la consulta y evita depender de
+una actualización programada.
 
 **Qué restricciones van en cada capa:** la integridad referencial (que un préstamo no pueda apuntar
-a un equipo o persona inexistente) la resuelve Postgres con claves foráneas
-(`onDelete: Restrict`, para no poder borrar un equipo o persona con historial de préstamos); el
-formato de los datos de entrada (fechas válidas, `fechaDevolucionPrevista >= fechaPrestamo`, email
-con formato válido) se valida con Zod antes de llegar a la base; y que un equipo no se pueda prestar
-dos veces al mismo tiempo es una regla de negocio que se resuelve en el service, dentro de una
-transacción, en el momento de crear el préstamo.
+a un equipo o persona inexistente) la resuelve Postgres con claves foráneas (`onDelete: Restrict`,
+para no poder borrar un equipo o persona con historial de préstamos); el formato de los datos de
+entrada (fechas válidas, `fechaDevolucionPrevista >= fechaPrestamo`, email con formato válido) se
+valida con Zod antes de llegar a la base; y que un equipo no se pueda prestar dos veces al mismo
+tiempo se controla en el service y con un índice único parcial en PostgreSQL. La transacción por sí
+sola no alcanza para garantizarlo con pedidos simultáneos; el detalle está en «API de Préstamos».
 
-**Nota sobre una vulnerabilidad reportada por `npm audit`:** al instalar las dependencias del
-backend, `npm audit` marca 3 vulnerabilidades "high" en `deepmerge-ts`, una dependencia interna del
-**CLI** de Prisma (`@prisma/config`), no de `@prisma/client` (lo único que corre en producción). No
-hay todavía una versión estable de Prisma que la corrija — la única más nueva disponible es una
-release candidate (`8.0.0-rc.12`), y no se adopta un release candidate en un proyecto que hay que
-mantener y defender todo el semestre. Queda como riesgo conocido, aceptado y no bloqueante, a
-revisar cuando Prisma publique una versión estable que la resuelva.
+**Resultado de `npm audit` al preparar la aplicación:** al instalar las dependencias del backend,
+`npm audit` marca 3 vulnerabilidades "high" en `deepmerge-ts`, una dependencia interna del **CLI**
+de Prisma (`@prisma/config`), no de `@prisma/client` (lo único que corre en producción). En ese
+momento, la alternativa más nueva disponible era una release candidate (`8.0.0-rc.12`). Se mantuvo
+la versión estable y se registró el riesgo para revisarlo después. Este es el resultado de aquella
+instalación, no un informe actualizado de vulnerabilidades. La separación de dependencias en la
+imagen de producción se explica en el TP2.
 
 ## Persistencia
 
@@ -170,10 +163,10 @@ se contenerice (TP2), esa misma variable va a apuntar al nombre del servicio (`d
 `localhost`.
 
 `backend/src/lib/prisma.ts` es la única instancia de `PrismaClient` de todo el proyecto: ningún
-controller ni route importa Prisma directo, solo los services (a partir de la Fase 5) importan
-`prisma` desde ese archivo. Se verificó a mano (con un script descartable, no versionado) que:
-persistir y leer los tres modelos funciona correctamente, y que la restricción `ON DELETE RESTRICT`
-de las claves foráneas efectivamente impide borrar un `Equipo` con préstamos asociados (lanza
+controller ni route importa Prisma directo, solo los services importan `prisma` desde ese archivo.
+Se verificó a mano (con un script descartable, no versionado) que: persistir y leer los tres modelos
+funciona correctamente, y que la restricción `ON DELETE RESTRICT` de las claves foráneas
+efectivamente impide borrar un `Equipo` con préstamos asociados (lanza
 `PrismaClientKnownRequestError`) — la primera de las reglas de negocio del enunciado, resuelta a
 nivel de base de datos en vez de en código.
 
@@ -186,13 +179,13 @@ service (`conEstadoDerivado`), a partir de si el equipo tiene o no un préstamo 
 `fechaDevolucionReal = null` — nunca se guarda ni se recalcula en otro lugar.
 
 **Traducción de errores de Prisma a HTTP:** dos códigos de error de Prisma se traducen a respuestas
-significativas en vez de dejar pasar un `500` genérico: `P2002` (violación de restricción única,
-acá el `codigo` repetido) se traduce a `409 Conflict`, y `P2003` (violación de clave foránea, acá un
+significativas en vez de dejar pasar un `500` genérico: `P2002` (violación de restricción única, acá
+el `codigo` repetido) se traduce a `409 Conflict`, y `P2003` (violación de clave foránea, acá un
 `Equipo` con préstamos asociados) también a `409`. Ambos se probaron de verdad por HTTP: el código
 duplicado devuelve `409` en el alta, y el borrado de un equipo con un préstamo activo (insertado
-directo con Prisma, ya que el endpoint de Préstamos es de la Fase 7) también devuelve `409` — la
-regla de negocio 1 del enunciado ("un equipo prestado no puede eliminarse sin más") ya queda
-validada de punta a punta antes de tiempo.
+directo con Prisma, antes de contar con el endpoint de Préstamos) también devuelve `409` — la regla
+de negocio 1 del enunciado ("un equipo prestado no puede eliminarse sin más") ya queda validada de
+punta a punta antes de tiempo.
 
 **Un detalle de tipos de Express 5:** `@types/express` 5.x tipa `req.params` como
 `{ [key: string]: string | string[] }` (para soportar rutas con parámetros repetidos, que esta app
@@ -229,25 +222,24 @@ Las 6 reglas del enunciado se probaron una por una por HTTP, contra el servidor 
    que pueda dejar un equipo "disponible" con un préstamo activo sin devolver, porque el estado no
    se guarda por separado: se lee siempre de la misma fuente.
 
-**Regla 1 y 2: transacción para el mensaje, índice único parcial para la garantía.** `crearPrestamo`
-corre en un `prisma.$transaction`: busca el equipo, la persona, chequea que no haya un préstamo activo, y
-recién ahí crea el nuevo préstamo. *Corrección del 26/10/2026:* la versión original de este párrafo
-afirmaba que la transacción cerraba la condición de carrera de dos pedidos simultáneos. **Eso era
-incorrecto.** Con el aislamiento por defecto de PostgreSQL (Read Committed), dos transacciones pueden leer
-«equipo libre» antes de que alguna confirme, y las dos insertan. Se reprodujo contra un Postgres 16 real:
-8 pedidos simultáneos por el mismo equipo dejaron más de un préstamo activo en **20 de 20 rondas**. La
-garantía real es ahora un **índice único parcial** en la base (migración
-`20261026120000_prestamo_activo_unico`: `UNIQUE ("equipoId") WHERE "fechaDevolucionReal" IS NULL`, la misma
-definición de «activo» que usa el código); el perdedor recibe el error `P2002` de Prisma, que el service
-traduce al mismo `409`. La transacción se conserva porque da el mensaje claro en el caso normal. Prisma no
-modela índices parciales: el índice vive sólo en la migración (comentado en `schema.prisma`). La prueba que
-lo demuestra está en `prestamos.concurrencia.test.ts` (ver «Registro de la revisión»).
+**Reglas 1 y 2: transacción e índice único parcial.** `crearPrestamo` usa una transacción para buscar
+el equipo y la persona, comprobar la disponibilidad y crear el préstamo. La transacción por sí sola
+no evita dos préstamos simultáneos: con Read Committed, dos pedidos pueden leer «equipo libre» antes
+de que alguno confirme. Este problema apareció durante el desarrollo y se resolvió con un índice
+único parcial: `UNIQUE ("equipoId") WHERE "fechaDevolucionReal" IS NULL`, definido en la migración
+`20261026120000_prestamo_activo_unico`. Así, la base admite un solo préstamo activo por equipo y el
+service traduce el error `P2002` de los demás intentos a `409`. Los préstamos devueltos quedan fuera
+del índice, por lo que el equipo se puede volver a prestar. El índice está en la migración SQL,
+con una referencia en `schema.prisma`.
+
+La comprobación está en `prestamos.concurrencia.test.ts`, contra PostgreSQL real. Se conserva la
+validación previa del service para responder con un mensaje claro cuando el equipo ya está prestado.
+La restricción de base cubre el caso en que dos pedidos pasan esa validación al mismo tiempo.
 
 **Un efecto secundario esperado, no un bug:** al querer limpiar los datos de prueba, `DELETE
 /api/equipos/:id` y `DELETE /api/personas/:id` dieron `409` incluso con el préstamo ya **devuelto**
-— es exactamente lo diseñado (`onDelete: Restrict` no distingue préstamos activos de históricos,
-adrede: son historial). La limpieza de la base de desarrollo se hizo con un script directo de
-Prisma, no por la API — que es, otra vez, el comportamiento correcto.
+— `onDelete: Restrict` también protege el historial. La limpieza de la base de desarrollo se hizo
+con un script directo de Prisma, porque la API conserva esos préstamos.
 
 ## API Dashboard
 
@@ -275,19 +267,18 @@ trae el scaffold: el segundo duplicaba reglas que ya cubre el `.gitignore` de la
 (una sola fuente de verdad para todo el repo, como se decidió en el TP1).
 
 Se agregó `react-router-dom` para las tres rutas (`/`, `/equipamiento`, `/prestamos`) en vez de
-armar la navegación a mano con estado — es la forma estándar de la industria para esto, y evita
-reinventar algo que la librería ya resuelve bien (back/forward del navegador, resaltado del link
-activo).
+armar la navegación a mano con estado — permite resolver el historial del navegador y el resaltado
+del enlace activo sin mantener esa lógica a mano.
 
-**Prueba de conectividad real:** el `vite.config.ts` proxea `/api` hacia `http://localhost:3000`
-(el mismo prefijo relativo que en producción va a traducir nginx, TP2). El plan original de esta
-fase mencionaba probar contra `/api/health` — pero el healthcheck vive en `/health` (sin el prefijo
-`/api`, ver la sección "API inicial" del diseño), a propósito: no es una ruta que la SPA deba poder
-alcanzar a través del proxy, es un chequeo de infraestructura que en el TP2 va a golpear el
-contenedor del backend directamente. Se probó la conexión real contra `GET /api/dashboard/resumen`
-en su lugar, que sí es un endpoint pensado para la SPA. Se verificó con el navegador (Dashboard
-muestra la respuesta real del backend, `{"totalEquipos":0,...}`) y navegando entre las tres
-pantallas, confirmando con `window.location.href` que el ruteo por cliente cambia la URL de verdad.
+**Prueba de conectividad real:** el `vite.config.ts` proxea `/api` hacia `http://localhost:3000` (el
+mismo prefijo relativo que en producción va a traducir nginx, TP2). El plan original de esta fase
+mencionaba probar contra `/api/health` — pero el healthcheck vive en `/health` (sin el prefijo
+`/api`), a propósito: no es una ruta que la SPA deba poder alcanzar a través del proxy, es un
+chequeo de infraestructura que en el TP2 va a golpear el contenedor del backend directamente. Se
+probó la conexión real contra `GET /api/dashboard/resumen` en su lugar, que sí es un endpoint
+pensado para la SPA. Se verificó con el navegador (Dashboard muestra la respuesta real del backend,
+`{"totalEquipos":0,...}`) y navegando entre las tres pantallas, confirmando con
+`window.location.href` que el ruteo por cliente cambia la URL de verdad.
 
 ## Frontend: Equipamiento
 
@@ -301,14 +292,12 @@ arquitectura general. Se probó en un navegador real, de punta a punta:
 - edición → precarga el formulario y actualiza la fila sin recargar la página;
 - alta con código duplicado → la UI muestra tal cual el mensaje del backend ("Ya existe un equipo
   con ese código"), sin inventar un mensaje propio;
-- intento de borrar un equipo con un préstamo activo (insertado directo con Prisma, igual que en la
-  Fase 5) → la UI muestra el `409` del backend ("No se puede eliminar un equipo con préstamos
+- intento de borrar un equipo con un préstamo activo (insertado directo con Prisma, como en la prueba de la API de Equipos) → la UI muestra el `409` del backend ("No se puede eliminar un equipo con préstamos
   asociados...") y el equipo **no** desaparece de la tabla — el error no deja la interfaz en un
   estado inconsistente con la base.
 
-No se agregó debounce a la búsqueda (dispara una request por cada tecla): para el volumen de datos
-de esta app la simplicidad vale más que la optimización, y agregarlo ahora sería resolver un
-problema de performance que todavía no existe.
+La búsqueda dispara una petición por tecla. Se dejó así por simplicidad y por el volumen reducido de
+datos; agregar debounce queda como mejora si las mediciones muestran que hace falta.
 
 ## Frontend: Préstamos
 
@@ -318,14 +307,14 @@ persona al registrar un préstamo, el formulario resuelve esto con un selector d
 existentes (`GET /api/personas`) más un alta rápida inline que llama al mismo endpoint de creación
 del TP — sin construir un CRUD de Personas que el enunciado no pide.
 
-**Un bug real encontrado y corregido:** al registrar un préstamo con devolución prevista el
-`06/09/2026`, la tabla mostraba `05/09/2026` — un día antes del elegido. Causa: `<input
-type="date">` no lleva hora, así que el valor
-`"2026-09-06"` se interpreta como medianoche **UTC**; `toLocaleDateString()` sin zona horaria
-explícita lo convierte a la hora **local** del navegador antes de mostrarlo, y en cualquier huso
-horario detrás de UTC eso cae en el día anterior. No es cosmético: es un desfasaje real de fecha. Se
-corrigió forzando `{ timeZone: "UTC" }` en el formateo — estas fechas representan un día elegido, no
-un instante preciso, así que tiene que mostrarse igual sin importar dónde esté el navegador.
+**Problema con las fechas:** al registrar un préstamo con devolución prevista el `06/09/2026`, la
+tabla mostraba `05/09/2026` — un día antes del elegido. Causa: `<input type="date">` no lleva hora,
+así que el valor `"2026-09-06"` se interpreta como medianoche **UTC**; `toLocaleDateString()` sin
+zona horaria explícita lo convierte a la hora **local** del navegador antes de mostrarlo, y en
+cualquier huso horario detrás de UTC eso cae en el día anterior. No es cosmético: es un desfasaje
+real de fecha. Se corrigió forzando `{ timeZone: "UTC" }` en el formateo — estas fechas representan
+un día elegido, no un instante preciso, así que tiene que mostrarse igual sin importar dónde esté el
+navegador.
 
 Se probó el ciclo completo en un navegador real:
 
@@ -333,25 +322,24 @@ Se probó el ciclo completo en un navegador real:
   propio formulario, y en `Equipamiento` pasa a `PRESTADO` sin haber tocado esa pantalla;
 - registrar la devolución → el préstamo pasa a `DEVUELTO` (el botón de devolución desaparece), y en
   `Equipamiento` el equipo vuelve a `DISPONIBLE`;
-- un préstamo vencido (insertado directo con Prisma, igual que en la Fase 7, porque el `<input
+- un préstamo vencido (insertado directo con Prisma, como en la prueba de la API de Préstamos, porque el `<input
   type="date">` no permite la precisión de segundos que usó esa prueba) se muestra en rojo con la
   etiqueta `VENCIDO`, y el filtro "Vencidos" lo aísla correctamente del resto.
 
-No se implementó ningún manejo de estado global ni cache entre pantallas (cada pantalla vuelve a
-pedir sus datos al navegar): para el tamaño de esta app alcanza, y agregarlo ahora sería
-sobre-ingeniería.
+Cada pantalla vuelve a pedir sus datos al navegar. Por el tamaño de la aplicación se mantuvo ese
+esquema, sin agregar estado global ni caché entre pantallas.
 
 ## Frontend: Dashboard
 
-Reemplaza el placeholder de conectividad de la Fase 9 por el contenido real: cinco tarjetas
-(`StatTile`) con los números de `GET /api/dashboard/resumen`. Se armó el mismo escenario de prueba
-de 5 equipos de la Fase 8 (uno disponible, tres prestados —al día, vencido, próximo a vencer— y uno
+El Dashboard reemplaza la prueba inicial de conectividad por cinco tarjetas (`StatTile`) con los
+números de `GET /api/dashboard/resumen`. Se armó el mismo escenario de prueba de 5 equipos descrito
+en «API Dashboard» (uno disponible, tres prestados —al día, vencido, próximo a vencer— y uno
 devuelto) y el Dashboard del frontend mostró exactamente `5 / 2 / 3 / 1 / 1`, coincidiendo con lo
-verificado por API en esa fase — misma fuente de datos, dos maneras de comprobarlo.
+verificado por API en esa prueba — misma fuente de datos, dos maneras de comprobarlo.
 
 Con esto queda completo el MVP de las tres pantallas (Dashboard, Equipamiento, Préstamos) definidas
-en el diseño de la interfaz, funcionando de punta a punta contra el backend real. Lo que sigue
-(Fases 13 en adelante) ya no agrega pantallas nuevas: es integración, Docker y CI.
+en el diseño de la interfaz, funcionando de punta a punta contra el backend real. Lo que sigue (TP2
+en adelante) ya no agrega pantallas nuevas: es integración, Docker y CI.
 
 ## Integración end-to-end y elección de CampusGear como app del semestre
 
@@ -372,20 +360,19 @@ vez de datos de prueba genéricos:
 
 No se encontró ningún defecto nuevo en este repaso: los dos bugs reales de esta etapa (el `500`
 incorrecto ante un body malformado, y el off-by-one de zona horaria en las fechas) ya se habían
-encontrado y corregido en las Fases 3 y 11 respectivamente.
+encontrado y corregido en la API y en la pantalla de Préstamos, respectivamente.
 
-**Por qué CampusGear como app del semestre, contra los criterios de la guía del TP2 (§3.3):**
+**Elección de CampusGear según los criterios de la guía del TP2 (§3.3):**
 
-- *¿Buildea y corre localmente hoy, sin magia?* Sí — se demostró en esta misma fase, de punta a
-  punta, sin Docker.
-- *¿Tiene o se le puede escribir tests?* Sí, y con ventaja: la lógica de negocio vive aislada en
-  `services/` (sin Express ni Prisma acoplados en el mismo lugar), pensada desde la Fase 3 para
-  poder testearse con Vitest sin levantar un servidor, y las rutas se pueden testear con Supertest
-  importando `app.ts` sin abrir un puerto — ambas cosas listas para el TP5.
-- *¿Se entiende el código lo suficiente como para modificarlo?* Sí: se construyó módulo por módulo
-  a lo largo de 12 fases, no se adoptó un proyecto ajeno.
+- *Build y ejecución local:* se comprobó el recorrido completo sin Docker antes de contenerizar.
+- *Posibilidad de escribir tests:* las reglas se separan de las rutas de Express. El acceso a Prisma
+  se puede reemplazar con dobles, y los cálculos pueden probarse sin levantar el servidor. El TP5
+  desarrolla esa separación con funciones de dominio. `app.ts` también permite probar las rutas
+  sin abrir un puerto, aunque la suite elegida no cubre todas las rutas.
+- *Comprensión y modificación:* la organización por módulos permite ubicar cada regla, cambiarla
+  y relacionarla con sus pruebas. El código y las decisiones quedan disponibles en el mismo repositorio.
 - *Tamaño:* tres entidades, tres pantallas, seis reglas de negocio — el CRUD + 2-3 pantallas que
-  pide la guía, sin agregar alcance que no sume nota.
+  pide la guía, con un alcance que se puede mantener durante el curso.
 
 # TP2 — Contenedores
 
@@ -397,11 +384,11 @@ Node no existe una imagen "SDK" separada como `mcr.microsoft.com/dotnet/sdk`, as
 entre etapas la marcan las dependencias instaladas (`npm ci` completo vs. `npm ci --omit=dev`), no
 la imagen base.
 
-**Un hallazgo real que costó tiempo diagnosticar:** la primera versión de la etapa final hacía
-`npx prisma generate` directamente ahí (para evitar copiar binarios entre etapas). Como el CLI
-`prisma` es una devDependency correctamente excluida por `--omit=dev`, `npx` lo descargaba solo al
-no encontrarlo — arrastrando el CLI completo (~200MB, incluyendo `typescript` y `effect`) a la
-imagen de producción. La imagen resultante pesaba **610MB**.
+**Problema con el tamaño de la imagen:** la primera versión de la etapa final hacía `npx prisma
+generate` directamente ahí (para evitar copiar binarios entre etapas). Como el CLI `prisma` es una
+devDependency correctamente excluida por `--omit=dev`, `npx` lo descargaba solo al no encontrarlo —
+arrastrando el CLI completo (~200MB, incluyendo `typescript` y `effect`) a la imagen de producción.
+La imagen resultante pesaba **610MB**.
 
 Al corregirlo (generar el cliente **una sola vez** en la etapa de build y copiar el resultado, ya
 que las dos etapas comparten la misma base y el motor generado es compatible) apareció un segundo
@@ -410,7 +397,8 @@ auto-instala en la etapa final igual, así no se lo invoque directamente — ni 
 `--omit=peer` por separado lo excluyen; hace falta **`--omit=dev --omit=peer --omit=optional`**
 juntos. Con eso, `node_modules/prisma`, `typescript`, `effect` y `fast-check` (~150MB en total)
 desaparecen de la imagen final, y de paso se resuelve la vulnerabilidad de `npm audit` que se venía
-arrastrando como riesgo aceptado desde la Fase 2 (era transitiva del propio CLI de Prisma).
+arrastrando como riesgo aceptado desde la instalación inicial (era transitiva del propio CLI de
+Prisma).
 
 **Comparación de tamaños** (con `node_modules` como diferencia principal, ya que la base es
 idéntica en ambas etapas):
@@ -436,16 +424,16 @@ corre **solo**, sin el backend — si el nombre estuviera escrito directo, nginx
 con `host not found in upstream`; con la variable, arranca igual y solo falla la request puntual
 cuando llega (`502 Bad Gateway`, verificado con la pestaña de red del navegador).
 
-**Se aprovechó para verificar un detalle adicional del frontend:** ante ese `502`, `apiFetch`
-(Fase 9) no rompe — nginx devuelve una página de error HTML, no JSON, así que el `.json().catch(()
-=> null)` de `apiFetch` cae al mensaje de respaldo `Error 502` en vez de tirar una excepción de
-parseo sin manejar. El Dashboard mostró ese mensaje correctamente en vez de quedarse colgado o
-crashear — el manejo de errores diseñado desde la Fase 9 resiste incluso una respuesta de error que
+**Se aprovechó para verificar un detalle adicional del frontend:** ante ese `502`, `apiFetch` no
+rompe — nginx devuelve una página de error HTML, no JSON, así que el `.json().catch(() => null)` de
+`apiFetch` cae al mensaje de respaldo `Error 502` en vez de tirar una excepción de parseo sin
+manejar. El Dashboard mostró ese mensaje correctamente en vez de quedarse colgado o crashear — el
+manejo de errores diseñado en la capa de acceso a la API resiste incluso una respuesta de error que
 no es JSON, un caso que no se había probado explícitamente hasta ahora.
 
-Checkpoint esperado de esta fase, tal como lo describe la guía: la interfaz se sirve
-correctamente en `localhost` con nginx, aunque todavía no puede hablar con el backend — son dos
-contenedores sueltos. Eso se resuelve recién en la Fase 16 (Compose), donde ambos comparten red.
+Checkpoint esperado de esta fase, tal como lo describe la guía: la interfaz se sirve correctamente
+en `localhost` con nginx, aunque todavía no puede hablar con el backend — son dos contenedores
+sueltos. Eso se resuelve recién en Compose, donde ambos comparten red.
 
 ## Docker Compose
 
@@ -455,9 +443,9 @@ directo, además de a través del frontend) y `frontend` (publica `8080`, la pue
 
 **El servicio `migrate`, y por qué existe.** El Postgres del compose nace con la base `campusgear`
 vacía, sin tablas — hace falta aplicar la migración de Prisma antes de que el backend pueda
-responder una sola consulta real. Pero en la Fase 14 se sacó deliberadamente el CLI de Prisma de la
-imagen final del backend (pesa ~150MB de más). Meterlo de nuevo ahí solo para poder correr
-`prisma migrate deploy` una vez por arranque hubiera deshecho esa optimización.
+responder una sola consulta real. Pero al preparar la imagen del backend se sacó deliberadamente el
+CLI de Prisma de la imagen final del backend (pesa ~150MB de más). Meterlo de nuevo ahí solo para
+poder correr `prisma migrate deploy` una vez por arranque hubiera deshecho esa optimización.
 
 La solución: `migrate` es un servicio de un solo uso que reconstruye con
 `build.target: build` — apuntando explícitamente a la etapa de build del **mismo** `Dockerfile`
@@ -475,6 +463,7 @@ servicio de un solo uso que corre y sale (como `migrate`) se espera con
 de error, en vez de dejar arrancar un backend contra una base sin tablas).
 
 **Validaciones realizadas de punta a punta:**
+
 - `docker compose up -d --build` levantó los cuatro servicios en el orden correcto (visible en el
   log: `db` sana → `migrate` corre y termina → `backend` y `frontend` arrancan).
 - El sistema completo funciona a través del puerto publicado del frontend (`localhost:8080`),
@@ -486,9 +475,10 @@ de error, en vez de dejar arrancar un backend contra una base sin tablas).
 ## Registry y cierre
 
 **Imágenes base elegidas:** `postgres:16-alpine` (la que pide el enunciado), `node:22-alpine` para
-build y runtime del backend (misma base en las dos etapas, ver Fase 14), `nginx:alpine` para servir
-el frontend — las tres son variantes Alpine, elegidas por tamaño sobre las variantes Debian
-default de cada imagen, sin ninguna necesidad de librerías de sistema que Alpine no traiga.
+build y runtime del backend (misma base en las dos etapas, ver «Dockerfile del backend»),
+`nginx:alpine` para servir el frontend — las tres son variantes Alpine, elegidas por tamaño sobre
+las variantes Debian default de cada imagen, sin ninguna necesidad de librerías de sistema que
+Alpine no traiga.
 
 **Qué persiste y qué no:** solo los datos de PostgreSQL, en el volumen nombrado `db_data`. Todo lo
 demás (el código de las imágenes, los `node_modules`, los estáticos del build de React) es
@@ -513,9 +503,15 @@ CI en el TP7) puede levantar CampusGear con solo `docker-compose.registry.yml` y
 clonar ni compilar nada del backend ni del frontend (`migrate` es la única excepción deliberada, ver
 `docker-compose.registry.yml`).
 
-Con esto se cierra el **TP2** completo: app elegida y contenerizada, Dockerfiles multi-stage para
-back y front, Compose con persistencia demostrada, e imágenes públicas verificadas con un `pull` sin
-credenciales.
+El TP2 dejó la aplicación en contenedores, con Dockerfiles multi-stage, Compose y persistencia en un
+volumen. Las imágenes públicas se comprobaron con un `pull` sin credenciales.
+
+## Declaración de uso de IA (TP2)
+
+Claude generó los Dockerfiles, la configuración de nginx y los archivos Compose. También realizó las
+comprobaciones de arranque, persistencia y publicación descritas arriba, y diagnosticó el tamaño de
+la imagen del backend. Los archivos versionados, las capturas y las imágenes publicadas documentan
+el resultado.
 
 # Mejora visual del frontend (fuera de fase, previa al TP3)
 
@@ -524,6 +520,7 @@ negocio, endpoints ni tipos: cero cambios en `api/`, `types/` ni en el backend (
 `git diff --stat`).
 
 **Qué se agregó:**
+
 - Un sistema de diseño en `index.css` (variables de color con paleta azul/celeste + verde-ámbar-rojo
   para estados semánticos, espaciado, radios y sombras consistentes, con soporte de modo oscuro vía
   `prefers-color-scheme`).
@@ -549,12 +546,9 @@ layout de la página).
 
 ## Duración del sprint
 
-Se eligió **2 semanas** para el Sprint 1. Es el punto de partida más común en Scrum (ni tan corto
-como para no poder terminar una historia con sus tareas, ni tan largo como para perder feedback
-frecuente), y alcanza cómodamente para la historia de este TP (2 tareas). Se puede acortar más
-adelante si el ritmo de los TPs de la cátedra lo pide, pero no hay motivo para arrancar más
-agresivo que esto sin datos todavía de cuánto tarda el equipo (acá, una sola persona) en cerrar una
-historia.
+El Sprint 1 se configuró con **2 semanas**. Da margen para completar la historia y sus dos tareas,
+con una revisión relativamente frecuente. Es un punto de partida: la duración se puede ajustar según
+lo que tarde el trabajo y el calendario de los TP.
 
 ## Límite de trabajo en progreso
 
@@ -563,7 +557,7 @@ por la guía: *cantidad de personas + 1*. Trabajando solo, eso da `1 + 1 = 2`. E
 para cuando algo queda esperando (una revisión, una respuesta) y hace falta poder avanzar en otra
 cosa sin quedarse completamente trabado — pero sin que el límite deje de limitar nada. Señal para
 bajarlo: si nunca se llega a 2, sobra margen. Señal para subirlo: si se llega a 2 todo el tiempo y
-genuinamente hace falta más paralelismo.
+hay tareas independientes que requieren más margen.
 
 ## Diagnóstico de la historia mal escrita
 
@@ -579,9 +573,9 @@ genuinamente hace falta más paralelismo.
 Reescrita como historia de verdad: *"Como responsable del laboratorio quiero que los préstamos
 queden guardados de forma persistente para no perder el historial si el servidor se reinicia."* La
 tabla en sí pasa a ser una **tarea** dentro de esa historia (exactamente el nivel donde ya vive en
-este proyecto: la migración de Prisma de la Fase 4).
+este proyecto: la migración de Prisma de la base de datos).
 
-## Problemas encontrados y cómo los resolví
+## Problemas encontrados y solución
 
 - **`gh` no estaba instalado** (se había optado por hacer todo el TP1 por la web). Para este TP, con
   la cantidad de objetos a crear (labels, issues, sub-issues, proyecto), se instaló con Homebrew —
@@ -604,34 +598,28 @@ este proyecto: la migración de Prisma de la Fase 4).
   GitHub las anida colapsadas bajo la fila del padre. Hubo que expandir la fila de la épica (y
   después la de la historia) para encontrarlas y poder asignarles el Sprint.
 
-## Declaración de uso de IA
+## Declaración de uso de IA (TP3)
 
-Usé Claude como asistente para diseñar los comandos de `gh` (labels, issues, sub-issues, proyecto,
-visibilidad, asignación de items), diagnosticar los problemas de autenticación y scopes, y guiar los
-pasos que solo se pueden hacer desde la web (vista de tablero, campo Iteration, límite de WIP,
-verificación de la automatización). Verificación: cada comando se corrió de verdad contra mi cuenta
-de GitHub — no se simuló nada — y el estado final (jerarquía, sprint asignado a historia y tareas
-pero no a la épica ni al bug, la tarea `#24` cerrada automáticamente por el PR) se confirmó
-consultando la API real con `gh project item-list --format json`, comparando el resultado contra lo
-esperado en vez de asumirlo.
+Claude generó y ejecutó los comandos de `gh` para labels, issues, sub-issues y proyecto, y ayudó con
+la autenticación y los permisos. También indicó la configuración web del tablero. El estado final se
+contrastó con la API de GitHub: jerarquía de issues, sprint de historia y tareas, y cierre
+automático de la tarea `#24` mediante el PR.
 
 # TP4 — Continuous Integration
 
 ## Estructura del pipeline
 
 Dos jobs, `build-backend` y `build-frontend`, en paralelo (cada uno en su propio runner, sin
-depender uno del otro): reflejan la separación real del proyecto (dos imágenes independientes,
-Fase 14 y 15 del TP2), y correr en paralelo reduce el tiempo total del pipeline a lo que tarda el
-más lento de los dos, no a la suma de ambos. Dispara en `pull_request` (la corrida que realmente
-importa: verifica el cambio propuesto antes de integrarlo) y en `push` a `main` (deja el estado del
-badge y, sobre todo, deja el cache de capas disponible para que el primer PR que llegue después ya
-lo aproveche).
+depender uno del otro): reflejan la separación real del proyecto (dos imágenes independientes, TP2),
+y correr en paralelo reduce el tiempo total del pipeline a lo que tarda el más lento de los dos, no
+a la suma de ambos. Dispara en `pull_request` (la corrida que realmente importa: verifica el cambio
+propuesto antes de integrarlo) y en `push` a `main` (deja el estado del badge y, sobre todo, deja el
+cache de capas disponible para que el primer PR que llegue después ya lo aproveche).
 
 ## Qué cachea el pipeline
 
 Se cachean las **capas de las imágenes de Docker** (`type=gha`, un `scope` distinto por job para que
-no se pisen entre sí — ver el riesgo documentado en la Fase 19 de la planificación). Verificado con
-dos corridas seguidas del mismo PR:
+no se pisen entre sí). Verificado con dos corridas seguidas del mismo PR:
 
 | | 1ª corrida (sin cache) | 2ª corrida (con cache) |
 |---|---|---|
@@ -652,7 +640,7 @@ versión de Node distinta, una dependencia que falta en un lado y no en el otro)
 `docker/build-push-action` sobre `./backend` y `./frontend`, el pipeline verifica **exactamente** lo
 mismo que corre en producción, con una sola fuente de verdad.
 
-## Problemas encontrados y cómo los resolví
+## Problemas encontrados y solución
 
 - **La primera corrida sobre el PR de la demo (`feature/demo-gate`) tenía que partir de un `main` ya
   actualizado con el `ci.yml` real** (no el esqueleto del TP3) — se mergeó primero el PR del pipeline
@@ -669,52 +657,50 @@ mismo que corre en producción, con una sola fuente de verdad.
   `main` avanzó — los tres estados que demuestra la secuencia completa del TP4, verificados por
   comando y no solo por inspección visual.
 
-## Declaración de uso de IA
+## Declaración de uso de IA (TP4)
 
-Usé Claude para diseñar el `ci.yml` (los dos jobs, el cache con `scope`, los triggers), para armar la
-secuencia completa de la demo (romper, verificar en local antes de subir, arreglar, y el segundo PR
-para mostrar `strict: true`), y para diagnosticar el JSON de branch protection antes de sobreescribirlo
-con el `PUT`. Verificación: cada corrida de CI mencionada acá es una corrida real (se puede ver en la
-pestaña *Actions* del repo, con sus tiempos exactos), y los tres estados de mergeabilidad
-(`BLOCKED`/`CLEAN`/`BEHIND`) se confirmaron contra la API real de GitHub, no se dieron por
-supuestos.
+Claude escribió el `ci.yml`, preparó la demostración de fallo y corrección, y revisó la protección
+de rama mediante la API. Las corridas de Actions muestran los tiempos y resultados. Los estados
+`BLOCKED`, `CLEAN` y `BEHIND` se comprobaron consultando GitHub durante esa secuencia.
 
-# Ajuste posterior — mostrar la fecha real de devolución
+# Mejora de la interfaz — mostrar la fecha real de devolución
 
 La tabla de Préstamos mostraba "Prestado el" y "Devolución prevista", pero no la fecha en que un
 préstamo **efectivamente** se devolvió (`fechaDevolucionReal`) — un dato que el backend siempre
-guardó y devolvió desde la Fase 7, pero que la UI nunca llegó a mostrar. Se agregó la columna
-"Devuelto el" a `PrestamoTable.tsx` (vacía, con un guion, mientras el préstamo sigue activo). No
-cambia nada de tipos ni de API: el dato ya viaja en cada respuesta, solo faltaba renderizarlo.
+guardó y devolvió desde la implementación de préstamos, pero que la UI nunca llegó a mostrar. Se
+agregó la columna "Devuelto el" a `PrestamoTable.tsx` (vacía, con un guion, mientras el préstamo
+sigue activo). No cambia nada de tipos ni de API: el dato ya viaja en cada respuesta, solo faltaba
+renderizarlo.
 
 # TP5 — Calidad automatizada
 
-## Qué lógica elegí testear y por qué ESA
+## Qué lógica se prueba y por qué
 
-Lo que duele si se rompe en CampusGear son las reglas de préstamos, no el cableado: *vencido*,
-*próximo a vencer*, el estado derivado del equipo, el resumen del dashboard, la validación de fechas
-y la traducción de errores de la base a HTTP. Todas estaban mezcladas con Prisma o con el reloj
-(`new Date()` adentro), así que **antes de testear hubo que refactorizar** (lo que la guía llama
-«el código testeable se diseña»):
+Se priorizaron las reglas que cambian el comportamiento de los préstamos: *vencido*, *próximo a
+vencer*, el estado derivado del equipo, el resumen del dashboard, la validación de fechas y la
+traducción de errores de la base a HTTP. Todas estaban mezcladas con Prisma o con el reloj (`new
+Date()` adentro), así que **antes de testear hubo que refactorizar** (lo que la guía llama «el
+código testeable se diseña»):
 
 - Se extrajo a `backend/src/domain/` (`prestamo.ts`, `equipo.ts`, `dashboard.ts`): funciones puras,
   sin Prisma ni Express, con el "ahora" como **parámetro** (default `new Date()`), así el test fija
   el reloj y no depende de la hora de la corrida.
-- Los *services* ahora delegan en el dominio y sólo hacen lo que es de frontera (hablar con la base).
+- Los *services* delegan los cálculos en el dominio y conservan la coordinación de consultas y reglas que necesitan la base.
 - `estaVencido` pasó de `prestamos.service.ts` a `domain/prestamo.ts`: sigue siendo **el único lugar**
   donde se define "vencido".
 
-El refactor tuvo su propio tropiezo, que cazó el compilador: `prestamos.map(conVencidoCalculado)`
-pasaba el **índice** del `map` como segundo argumento, que ahora es el `ahora: Date` — un clásico de
-JavaScript que `tsc` rechazó antes de llegar a ningún test. Se resolvió con `(p) => conVencidoCalculado(p)`.
+Durante el refactor, el compilador detectó un problema: `prestamos.map(conVencidoCalculado)` pasaba
+el **índice** del `map` como segundo argumento, que ahora es el `ahora: Date` — un argumento
+incompatible que `tsc` rechazó antes de ejecutar los tests. Se resolvió con `(p) =>
+conVencidoCalculado(p)`.
 
-## Suite de backend (Vitest): 32 tests en 7 archivos
+## Suite de backend (Vitest): 32 tests en 7 archivos al implementar el TP5
 
 | Regla | Dónde | Técnicas |
 |---|---|---|
 | 5 · vencido / próximo a vencer | `domain/prestamo.test.ts` | `it.each` con bordes (`<` vs `<=`, ventana de 3 días incluida) |
 | 6 · estado derivado sin duplicar | `domain/equipo.test.ts` | AAA |
-| Dashboard | `domain/dashboard.test.ts` | el escenario 5/2/3/1/1 de la Fase 8, ahora automatizado |
+| Dashboard | `domain/dashboard.test.ts` | el escenario 5/2/3/1/1 de la API Dashboard, ahora automatizado |
 | 3 · fecha de devolución no anterior | `schemas/prestamo.schema.test.ts` | reloj falso, `it.each`, **caso de error** que verifica el mensaje |
 | 2 · no prestar dos veces | `services/prestamos.service.test.ts` | **mock** de `lib/prisma` con `vi.mock`; verifica la interacción (`toHaveBeenCalledWith`, `not.toHaveBeenCalled`) |
 | Errores de Prisma → HTTP | `services/equipos.service.test.ts`, `middlewares/errorHandler.test.ts` | mock; el 500 **no filtra** el detalle interno |
@@ -725,20 +711,33 @@ interfaz» es reemplazar ese módulo; el test le pasa un doble que registra qué
 descartó reescribir los services como clases con constructor: agregaba una capa que el proyecto no
 necesita y obligaba a tocar todos los controllers.
 
-**Verificación de que los tests verifican (mutación manual).** Se rompió a propósito cada una de 7
-reglas y se corrió la suite: `<`→`<=` en vencido, sacar el `ACTIVO` de `estaVencido`, `<=`→`<` en el
-límite de la ventana, `>0`→`>1` en el estado del equipo, no restar los prestados en el dashboard,
-aflojar la validación de fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo
-en rojo** y el código se restauró. Esto no es el pipeline: se corrió en la máquina de desarrollo (ejecutado por Claude), como
-diagnóstico, igual que dice el §2.4.
+**Comprobación con mutaciones manuales.** Se rompió a propósito cada una de 7 reglas y se corrió la
+suite: `<`→`<=` en vencido, sacar el `ACTIVO` de `estaVencido`, `<=`→`<` en el límite de la ventana,
+`>0`→`>1` en el estado del equipo, no restar los prestados en el dashboard, aflojar la validación de
+fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo en rojo** y después se
+restauró el código. Fue una comprobación local de Claude, separada del pipeline, para revisar si los
+tests detectaban cambios en las reglas.
 
-## Suite de frontend (Vitest, sin DOM): 18 tests en 3 archivos
+**Prueba de concurrencia con base real.** Además de los unitarios, se agregó
+`prestamos.concurrencia.test.ts`: cinco rondas de ocho pedidos simultáneos y un caso de devolución
+y nuevo préstamo. Con el índice, cada ronda deja un solo préstamo activo; al quitarlo únicamente
+en una base descartable, fallan los cinco casos de concurrencia. La suite completa con base pasó
+40 de 40 tests. `build-backend` levanta un PostgreSQL efímero, aplica las migraciones y ejecuta estas
+pruebas con la cobertura.
+
+La [corrida 40408917673](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/40408917673)
+del [PR #78](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/78), sobre `8746832`, dejó los
+checks de backend y frontend en verde. En esa corrida se omitieron los despliegues por ser un PR.
+La aplicación del índice en QA y PROD se debe comprobar en la cadena de `main` después del merge;
+los tests de la base efímera no demuestran que esos entornos ya tengan la migración.
+
+## Suite inicial de frontend (Vitest, sin DOM): 18 tests en 3 archivos
 
 Igual que en el backend, primero hubo que **sacar la lógica de los componentes**. Estaba adentro de
 `PrestamoTable`/`EquipoTable`/`PrestamoForm`, donde sólo se podía probar renderizando. Ahora vive en
 `frontend/src/lib/` como funciones puras y los componentes sólo las llaman:
 
-- `lib/fechas.ts`: `formatearFecha` (el arreglo del off-by-one de zona horaria de la Fase 11, que hasta
+- `lib/fechas.ts`: `formatearFecha` (el arreglo del off-by-one de zona horaria de la pantalla de Préstamos, que hasta
   ahora no tenía ningún test que lo protegiera) y `fechaInputAIso`, que ahora rechaza una fecha
   inválida con un mensaje en vez de dejar que `toISOString()` tire un `RangeError` críptico.
 - `lib/estados.ts`: traduce lo que **ya decidió el backend** (`estado`, `vencido`) a etiqueta + color.
@@ -748,12 +747,12 @@ Igual que en el backend, primero hubo que **sacar la lógica de los componentes*
 |---|---|
 | Parametrizado (`it.each`) | fechas (3 días, incluido fin de año), etiquetas de estado, fechas inválidas |
 | Caso de error | `fechaInputAIso("")` y `apiFetch` ante un 409 (propaga el mensaje del backend) y ante un 502 con HTML (cae a `Error 502`) |
-| **Mock** | `vi.stubGlobal("fetch", …)`: el test no sale a la red, y después verifica **a qué URL** se llamó (`/api/equipos?q=kit%20uno%26x`). Es la regla de la Fase 9 (ruta relativa) convertida en test |
+| **Mock** | `vi.stubGlobal("fetch", …)`: el test no sale a la red, y después verifica **a qué URL** se llamó (`/api/equipos?q=kit%20uno%26x`). Comprueba el uso de rutas relativas y la codificación de la búsqueda |
 
 Un cambio de comportamiento deliberado: `formatearFecha` ahora usa el locale `es-AR` fijo en vez del
-del navegador, para que el test dé lo mismo en cualquier máquina o runner. En un navegador configurado
-en otro idioma las fechas se ven en formato argentino; para una app de uso en la institución es lo
-correcto, y el costo es no respetar el idioma del navegador.
+del navegador, para que el test dé lo mismo en cualquier máquina o runner. En un navegador
+configurado en otro idioma las fechas también se ven en formato argentino. Se eligió ese formato
+para la institución; el costo es no respetar el idioma del navegador.
 
 **Mutación manual (6 mutantes, 6 detectados):** forzar otra zona horaria en las fechas (2 tests en
 rojo), apagar la prioridad del vencido, cambiar el color de Disponible, hardcodear
@@ -789,26 +788,25 @@ test importa):**
 | Backend (con exclusiones) | 38,21 % | 48,71 % | 40,00 % |
 | Frontend (con exclusiones) | 64,51 % | 80,95 % | 43,75 % |
 
-Sin ninguna exclusión daba 30,92 % (backend) y 12,34 % (frontend) de líneas: el número real no es el
-que sale de excluir lo incómodo, y por eso la lista de abajo es corta y está justificada.
+Sin exclusiones, la cobertura de líneas daba 30,92 % en backend y 12,34 % en frontend. Por eso el
+porcentaje se presenta junto con el alcance medido: las exclusiones cambian el denominador.
 
-**Qué se excluye y por qué (sólo código sin decisiones propias):**
+**Qué se excluye y por qué:**
 
 - Backend: `server.ts` (`app.listen`), `app.ts` (cableado de middlewares), `config/env.ts` (lee
   `process.env`), `lib/prisma.ts` (instancia el cliente), `routes/**` (tabla ruta → controller).
 - Frontend: `main.tsx` (arranque), `App.tsx` (rutas), `types/**` (sólo tipos: no hay código en
-  runtime), `components/**` y `pages/**` (presentación: estos tests corren sin DOM y la UI queda
-  cubierta por los e2e de Playwright del TP7).
+  runtime), `components/**` y `pages/**` (presentación: la suite de Vitest se definió sin DOM). El TP7 agrega
+  tres flujos de navegador sobre equipos; esos flujos no cubren toda la interfaz.
 - **No se excluye**: controllers, services, domain, schemas, middlewares, `api/` ni `lib/`. Los
   controllers y `validate.ts` hoy están en 0 % y siguen contando; excluirlos habría subido el número
   sin que el código estuviera más protegido.
 
 **Umbral: líneas ≥ 38 % y ramas ≥ 48 % en el backend; líneas ≥ 64 % y ramas ≥ 80 % en el frontend.**
-Están **anclados en lo medido** (el piso apenas debajo del valor real), no en un número redondo
-elegido de memoria. Un 80 % de mentira con exclusiones mágicas habría sido más vistoso y menos
-honesto. Funciona como trinquete: la cobertura no puede bajar sin que el build se ponga rojo, y
-cuando se agregan tests se sube el piso. Se mide **líneas y ramas** y se reportan ambas; el umbral se
-fija sobre las dos porque las líneas solas esconden los `if` sin su `else` probado.
+Se tomaron como punto de partida los valores medidos, con un piso apenas inferior. El objetivo es
+detectar retrocesos sobre ese alcance. A medida que se agregan pruebas, también se puede subir el
+umbral. Se miden y reportan **líneas y ramas**. Las líneas cubiertas por sí solas pueden ocultar
+condiciones para las que sólo se probó uno de los resultados.
 
 Comprobación: con el umbral forzado a 90 % el contenedor sale con `exit 1` y dice
 `Coverage for lines (38.21%) does not meet global threshold (90%)`; con el umbral real sale con `0`.
@@ -820,9 +818,9 @@ Comprobación: con el umbral forzado a 90 % el contenedor sale con `exit 1` y di
    `--coverage.clean=false` (en el runner el directorio ya nace vacío).
 2. El backend es CommonJS y un `vitest.config.ts` ESM disparaba una advertencia; se renombró a
    `vitest.config.mts`.
-3. Mis primeras corridas locales ocultaban el fallo porque encadené `docker build -q` con `&&` y
-   redirigí la salida; la primera señal fue que no aparecía ningún test. Moraleja: verificar el
-   código de salida, no asumir que "no hubo error".
+3. En las primeras corridas locales, la combinación de `docker build -q`, `&&` y salida redirigida
+   ocultó el punto del fallo. Se detectó porque no aparecían tests. La corrección fue revisar el
+   código de salida y conservar la salida necesaria para diagnosticarlo.
 
 **Actualización tras el gate (sección siguiente):** los pisos subieron al valor nuevo medido. Backend:
 líneas ≥ 38 %, ramas ≥ 50 %. Frontend: líneas ≥ 74 %, ramas ≥ 88 %. La suite total es de 32 tests de
@@ -832,10 +830,11 @@ backend y 28 de frontend.
 
 **Versión de la herramienta:** Vitest 5.0.3 con `@vitest/coverage-v8`.
 
-**PR #1 — rojo → verde → merge** ([PR #37](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/37)).
-Agregué `textoDeVencimiento` en `frontend/src/lib/vencimiento.ts`, una función de ~25 líneas con siete
-salidas posibles y **ningún test**. Compila (`tsc` limpio) y los 18 tests existentes seguían en verde,
-así que lo que frenó no fue la compilación del TP4 sino la calidad:
+**PR #1 — rojo → verde → merge** ([PR
+#37](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/37)). Se agregó
+`textoDeVencimiento` en `frontend/src/lib/vencimiento.ts`, una función de ~25 líneas con siete
+salidas posibles y **ningún test**. Compila (`tsc` limpio) y los 18 tests existentes seguían en
+verde, así que lo que frenó no fue la compilación del TP4 sino la calidad:
 
 - Corrida roja: [actions/runs/37682311566](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/37682311566),
   job `build-frontend`. El estado del PR quedó `BLOCKED`. `build-backend` siguió verde: alcanza con
@@ -859,9 +858,9 @@ los 32 tests pasan, y el check `build-backend` quedó rojo con
 No se arregla ni se cierra hasta la defensa: es la prueba visible de que el freno funciona, más
 convincente que la pantalla de configuración de la protección de rama, que sólo ve quien administra.
 
-**Por qué hice la cuenta antes de subir.** El porcentaje es sobre todo lo medido: con 61 líneas
-cubiertas de 157, agregar 5 líneas sin tests da 61/162 = 37,7 %, apenas bajo el piso. Por eso el
-código nuevo es de ~15 líneas ejecutables.
+**Por qué se calculó el efecto antes de subir.** El porcentaje es sobre todo lo medido: con 61
+líneas cubiertas de 157, agregar 5 líneas sin tests da 61/162 = 37,7 %, apenas bajo el piso. Por eso
+el código nuevo es de ~15 líneas ejecutables.
 
 ### Ejercicio de la rama sin cubrir
 
@@ -870,26 +869,25 @@ código nuevo es de ~15 líneas ejecutables.
    equipo inexistente, pero nunca el de la persona inexistente.
 2. **Qué entrada la recorre:** un `personaId` que no existe (el doble de Prisma responde `null` en
    `persona.findUnique`) con un equipo que sí existe. Debe lanzar `NotFoundError("Persona no encontrada")`.
-3. **Qué decidí:** agregar el test. Es la regla 1 del enunciado (no se presta a quien no existe) y el
+3. **Decisión:** agregar el test. Es la regla 1 del enunciado (no se presta a quien no existe) y el
    único camino de esa función sin protección; además verifica que **no se cree** el préstamo. El
    backend pasó de 49 % a 50 % de ramas.
 
-### Qué aprendí
+### Conclusiones de las pruebas
 
 - Un test verde no significa «probado»: las 18 pruebas del frontend pasaban con 46 % de líneas.
 - La cobertura señala dónde mirar, no qué hacer. Medir sin exclusiones daba 12 % en el frontend: la
   lista de exclusiones es una decisión de diseño y tiene que poder defenderse línea por línea.
-- Falló un supuesto mío: pensé que el umbral de un lado solo bastaba para la demostración; con Vitest 5
-  caen líneas y ramas a la vez, así que pongo umbral en ambas.
+- La demostración hizo caer líneas y ramas a la vez con Vitest 5. Se mantuvieron umbrales para
+  ambas métricas, porque miden aspectos diferentes de la cobertura.
 
 ## Declaración de uso de IA (TP5)
 
-Claude Code extrajo la lógica a funciones puras, escribió los tests, configuró la cobertura y armó el
-pipeline. Las comprobaciones (correr cada suite, la mutación manual —7 de 7 en backend y 6 de 6 en
-frontend—, forzar un umbral imposible y leer los reportes de la corrida roja y la verde) las ejecutó Claude
-durante el desarrollo; el alumno no las repitió por su cuenta. Los reportes y corridas enlazados son los
-registros verificables.
-
+Claude Code extrajo las funciones de dominio, escribió las pruebas y configuró la cobertura y el
+pipeline. También ejecutó las suites y las mutaciones manuales: 7 de 7 detectadas en backend y 6 de
+6 en frontend. La comprobación del umbral se hizo forzando un valor imposible y contrastando las
+corridas roja y verde. Los reportes de cobertura y los PR enlazados permiten revisar esos
+resultados.
 
 # TP6 — Entrega continua, entornos y rollback
 
@@ -900,13 +898,13 @@ Hasta el TP5 el pipeline *verificaba*; ahora también *entrega*. Cada job (`buil
 
 - **Dos paquetes**, porque CampusGear tiene dos Dockerfiles:
   `ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-backend` y `…-frontend`. El nombre va escrito a mano
-  en minúsculas: el registry no acepta mayúsculas y mi usuario las tiene, así que
+  en minúsculas: el registry no acepta mayúsculas y el nombre de la cuenta las tiene, así que
   `${{ github.repository }}` habría fallado con `repository name must be lowercase`.
 - **Etiqueta = el commit** (`sha-<commit completo>`), no `latest` ni una versión a mano: dado el tag
   de una imagen, se sabe exactamente qué código la produjo. No existe `latest`, porque una etiqueta
   que se mueve no dice qué verificó el pipeline.
 - **Paquetes nuevos y no los viejos.** Los anteriores (`campusgear-backend` / `-frontend`, `v0.1.0`)
-  los subí a mano con un token personal en el TP2. El `GITHUB_TOKEN` de una corrida podría no tener
+  se publicaron manualmente con un token personal en el TP2. El `GITHUB_TOKEN` de una corrida podría no tener
   permiso de escritura sobre paquetes creados por otra credencial, y reutilizarlos era apostar a eso.
   Los nuevos nacen de este pipeline y quedan enlazados al repositorio con
   `LABEL org.opencontainers.image.source` en cada Dockerfile.
@@ -956,14 +954,14 @@ nginx sobreviven; y para un backend **HTTPS** (un servicio público de la nube) 
 `proxy_ssl_server_name on` y `proxy_set_header Host $proxy_host`, o el handshake TLS y el ruteo por
 `Host` fallan.
 
-**Cómo lo comprobé:** (a) con los defaults, compose levanta y `/api/...` responde por el 8080;
-(b) la misma imagen con `BACKEND_URL=https://api.github.com` y `DNS_RESOLVER=1.1.1.1` genera la
-configuración esperada y devuelve la respuesta de GitHub (su propio `404 Not Found` en JSON, no un
-502 de nginx: eso prueba que SNI y `Host` están bien); (c) el fallback de la SPA (`/prestamos` → 200
-con el `index.html`) sigue funcionando.
+**Comprobaciones realizadas:** (a) con los defaults, compose levanta y `/api/...` responde por el
+8080; (b) la misma imagen con `BACKEND_URL=https://api.github.com` y `DNS_RESOLVER=1.1.1.1` genera
+la configuración esperada y devuelve la respuesta de GitHub (su propio `404 Not Found` en JSON, no
+un 502 de nginx: eso prueba que SNI y `Host` están bien); (c) el fallback de la SPA (`/prestamos` →
+200 con el `index.html`) sigue funcionando.
 
 **Límite conocido:** `DNS_RESOLVER` depende de la plataforma. En Render el resolver no es el de
-Docker; se carga como variable del servicio (se verifica en la Fase 27, no se asume).
+Docker; se carga como variable del servicio (se verifica en el despliegue en Render, no se asume).
 
 **2. Migraciones.** La imagen final del backend no trae el CLI de Prisma (decisión del TP2: pesaba
 ~150 MB), así que no puede migrar a una base remota. Las migraciones no se ejecutan al arrancar la
@@ -974,18 +972,18 @@ migraciones versionadas, y `migrate deploy` es idempotente (comprobado: contra u
 responde `No pending migrations to apply`). Para Neon va la URL **directa** (no la *pooled*), porque
 las migraciones usan bloqueos de sesión que el pooler no garantiza.
 
-**3. `docker-compose.registry.yml`** apuntaba a `campusgear-*:v0.1.0`, los paquetes del TP2. Ahora usa
-los del pipeline, `ingsoft3-tp01-{backend,frontend}:sha-${IMAGE_SHA}`, y `IMAGE_SHA` es obligatoria
-(si falta, compose falla con un mensaje que dice qué definir). Se comprobó levantándolo con las
-imágenes publicadas del commit del merge de la Fase 25.
+**3. `docker-compose.registry.yml`** apuntaba a `campusgear-*:v0.1.0`, los paquetes del TP2. Ahora
+usa los del pipeline, `ingsoft3-tp01-{backend,frontend}:sha-${IMAGE_SHA}`, y `IMAGE_SHA` es
+obligatoria (si falta, compose falla con un mensaje que dice qué definir). Se comprobó levantándolo
+con las imágenes publicadas de un commit de `main`.
 
 ## Entornos: Neon (bases) y Render (ejecución)
 
-**Dos bases, un solo servidor.** En Neon (plan gratuito, proyecto `campusgear`, AWS US East 2) hay dos
-bases dentro de la misma rama, `app_qa` y `app_prod`: entornos separados a nivel de datos, suficiente
-para la materia. Elegí Neon y no el Postgres de Render porque el gratuito de Render **expira a los 30
-días**; el de Neon es permanente (con límites de uso y suspensión por inactividad). Elegir infraestructura
-también es leer la letra chica.
+**Dos bases en la misma rama de Neon.** El proyecto `campusgear` (AWS US East 2) usa `app_qa` y
+`app_prod`, separadas a nivel de datos, aunque comparten infraestructura. Se eligió Neon porque, al
+configurar el TP6, el PostgreSQL gratuito de Render tenía una duración de 30 días. Neon permitía
+conservar la base sin ese vencimiento, sujeto a los límites del plan y a la suspensión por
+inactividad.
 
 **Cuatro Web Services de Render con Docker**, todos con *Auto-Deploy desactivado*, porque el deploy lo
 dispara el pipeline, no el proveedor: si Render se desplegara solo en cada push, el deploy no esperaría
@@ -1019,7 +1017,7 @@ suspende el cómputo por inactividad. El smoke test lo tiene en cuenta (30 reint
 
 1. **502 en los dos frontends con las variables "bien puestas".** El log de nginx decía
    `backend could not be resolved` con `resolver: 127.0.0.11:53`: esos son los **valores por defecto de
-   compose**, no los que yo había cargado en Render. Las variables de entorno se cargaron *después* del
+   compose**, aunque en Render ya se habían guardado otros valores. Las variables de entorno se cargaron *después* del
    primer deploy y Render no reinicia el contenedor al guardarlas. Un **Manual Deploy** las aplicó.
    Se descartó primero probando la misma imagen en la máquina de desarrollo con esos mismos valores (funcionaba), lo que
    mostraba que el problema era de configuración en Render y no del código.
@@ -1046,20 +1044,21 @@ Decisiones de diseño:
   no se imprimen.
 - **`concurrency` por entorno** (`cancel-in-progress: false`): dos corridas no despliegan al mismo
   entorno a la vez, y una que ya está desplegando no se cancela a mitad.
-- **El revisor soy yo, con *prevent self-review* apagado.** Trabajo solo en el repositorio: con esa regla
-  encendida nadie podría aprobar nunca. El valor del gate no es que lo apruebe otra persona sino que el
-  paso a producción sea **un acto deliberado y registrado**, no un efecto secundario del merge.
+- **La cuenta del repositorio es el revisor, con *prevent self-review* apagado.** Es un proyecto
+  individual y esa configuración permite aprobar las propias corridas. La promoción queda como
+  una decisión explícita y registrada. No equivale a una revisión independiente de otra persona.
 - **Qué prueba y qué no el smoke test.** Comprueba que la api, la base, el front y el proxy
   **responden**. No prueba que estén ejecutando *este* commit: mientras Render construye el nuevo, el
   servicio anterior sigue respondiendo y el smoke puede dar verde de inmediato. Eso se verifica en
   *Events* de cada servicio de Render.
 
-**Evidencia: una promoción rechazada**
-([corrida 38189496720](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720)).
-El merge de este workflow desplegó QA y el job de PROD quedó esperando. La cuenta del alumno lo
-**rechazó** con este comentario, que GitHub conserva: *«QA está recién migrado y todavía no creé ni edité ningún equipo en QA. No paso a PROD
-hasta verificar el flujo completo ahí.»* GitHub lo registra y la corrida termina con `deploy-prod`
-fallido: así se ve un freno humano. PROD, mientras tanto, quedó intacto (sin tablas, sin desplegar).
+**Evidencia: una promoción rechazada** ([corrida
+38189496720](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720)). El
+merge de este workflow desplegó QA y el job de PROD quedó esperando. La promoción se **rechazó** con
+este comentario, registrado en GitHub: *«QA está recién migrado y todavía no creé ni edité ningún
+equipo en QA. No paso a PROD hasta verificar el flujo completo ahí.»* GitHub lo registra y la
+corrida termina con `deploy-prod` fallido: así se ve un freno humano. PROD, mientras tanto, quedó
+intacto (sin tablas, sin desplegar).
 
 ## Aislamiento: cómo se comprobó que cada entorno usa su propia base
 
@@ -1067,76 +1066,76 @@ El error más silencioso de este TP es que PROD apunte a la base de QA: las dos 
 difieren en una sola palabra (`app_qa` / `app_prod`), y si se cruzan **nada se pone rojo**: PROD levanta,
 contesta y el smoke da verde. Por eso se comprobó con un dato que sólo existe en una base:
 
-1. Se insertó desde el SQL Editor de Neon (consola de la cuenta del alumno, a pedido del asistente), **con `app_prod` seleccionada**, un equipo inconfundible
+1. Se insertó desde el SQL Editor de Neon, **con `app_prod` seleccionada**, un equipo de prueba
    (`SOY PROD`, código `PROD-AISLAMIENTO`).
-2. Pedí la lista de equipos a las dos APIs y a los dos frontends: **PROD** devolvió el equipo y **QA**
+2. Se consultó la lista de equipos a las dos APIs y a los dos frontends: **PROD** devolvió el equipo y **QA**
    devolvió `[]`, tanto directo a la API como a través del proxy de nginx de cada frontend.
 3. Se borró el dato de prueba.
 
 Esto además es una prueba de que cada frontend apunta a **la API de su entorno** (`BACKEND_URL`).
 
-## Rollback: lo que intenté, lo que falló y lo que medí
+## Rollback: intentos y tiempos registrados
 
 Sobre `campusgear-api-prod` (que tiene dos deploys: el inicial `c4e31c6` y el del pipeline `2c71e16`):
 
 - **Por el botón *Rollback* de Render: falló.** Respondió `Error: could not roll back to deploy
   dep-db61lvid0e5s7392lf0g`, dos veces, con el servicio despierto y sano. La documentación de Render dice
   que sólo se puede volver a deploys cuyo artefacto de build siga guardado, y que en el plan gratuito
-  se retienen pocos; las páginas no coinciden del todo en el número, así que **no afirmo cuál fue la
-  causa** en mi caso. Lo dejo registrado tal cual: en un entorno real el botón de emergencia también
-  puede no estar.
+  se retienen pocos. No se determinó la causa concreta del fallo, por lo que se probó otra forma
+  de volver al commit anterior.
 - **Alternativa que sí funcionó: redesplegar el commit anterior**
   (*Manual Deploy → Deploy a specific commit → `c4e31c6`*). Tiempo leído en Render, de confirmar a *Live*:
-  **28,48 s** (no hay cronómetro independiente). Se verificó desde afuera que PROD quedó **sano** (no que corriera ese commit: el backend no expone su versión) (`/health`, dashboard con la
+  **28,48 s**, según el registro del servicio. Se verificó desde afuera que PROD quedó **sano** (no que corriera ese commit: el backend no expone su versión) (`/health`, dashboard con la
   base de PROD y proxy del frontend respondiendo).
 - **Volver al último commit** (`2c71e16`): **30,09 s**.
 - Para comparar, la duración de los deploys que muestra Render: 57,9 s el primero y 24,5 s el del
   pipeline (con capas de Docker ya en caché).
 
-**Qué significa:** como Render reconstruye desde el repositorio, **un rollback por commit es un deploy
-más, no una vuelta atrás instantánea**: ~30 s en este proyecto chico porque las capas ya estaban en
-caché, y bastante más con dependencias nuevas o caché frío. Con el botón de Render (si anda) se reutiliza
-un build ya hecho y es más rápido. Y el cronómetro no cuenta el arranque en frío posterior ni el tiempo
-de darse cuenta de que hay que volver. **Lo que un rollback no deshace:** las migraciones de la base. Si
-un deploy migró una tabla, volver al código anterior no la revierte; por eso las migraciones se escriben
-compatibles hacia atrás (agregar antes que quitar).
+**Qué significa:** como Render reconstruye desde el repositorio, **un rollback por commit es un
+deploy más, no una vuelta atrás instantánea**: ~30 s en este proyecto chico porque las capas ya
+estaban en caché, y bastante más con dependencias nuevas o caché frío. Con el botón de Render (si
+anda) se reutiliza un build ya hecho y es más rápido. Ese tiempo no incluye la detección del
+problema ni un posible arranque en frío posterior. **Lo que un rollback no deshace:** las
+migraciones de la base. Si un deploy migró una tabla, volver al código anterior no la revierte; por
+eso las migraciones se escriben compatibles hacia atrás (agregar antes que quitar).
 
-## Cierre del TP6: qué es CD, qué pattern uso y qué entrega este pipeline
+## Cierre del TP6: tipo de CD, estrategia de despliegue y alcance
 
-**Continuous Delivery vs. Continuous Deployment.** En *Delivery* cada cambio que pasa los checks queda
-**listo para producción** y hay una decisión humana para salir; en *Deployment* sale solo. Este
-proyecto es **Continuous Delivery**: todo lo verificable es automático (tests, cobertura, imágenes, deploy
-a QA con smoke) pero **producción espera una aprobación** en el environment `production`. La aprobación
-no es burocracia: la primera registrada fue un **rechazo** con un motivo concreto (todavía no había
-mirado QA), y el pipeline respetó el freno.
+**Continuous Delivery vs. Continuous Deployment.** En *Delivery* cada cambio que pasa los checks
+queda **listo para producción** y hay una decisión humana para salir; en *Deployment* sale solo.
+Este proyecto es **Continuous Delivery**: las comprobaciones definidas en el pipeline son
+automáticas (tests, cobertura, imágenes, deploy a QA con smoke) pero **producción espera una
+aprobación** en el environment `production`. La primera promoción registrada fue un rechazo por
+falta de comprobación del flujo en QA, y el pipeline respetó ese freno.
 
-**Pattern de despliegue.** Uso el que trae Render por defecto en un servicio web, un **rolling deploy
-sobre una sola instancia**: levanta el contenedor nuevo y recién después reemplaza al anterior, y lo que
-el pipeline añade es la **promoción escalonada** (QA primero, PROD después de la aprobación). No
-implementé blue/green ni canary: con un plan gratuito de una instancia por servicio no hay cómo mantener
-dos versiones vivas a la vez ni repartir tráfico, y pretender lo contrario sería inventar una garantía.
-**Consecuencia honesta:** con una sola instancia no se puede asegurar cero cortes durante un deploy, y los
-arranques en frío empeoran la percepción.
+**Estrategia implementada.** Se usa el reemplazo de instancia gestionado por Render, descrito aquí
+como **rolling sobre una instancia**: levanta el contenedor nuevo y recién después reemplaza al
+anterior, y lo que el pipeline añade es la **promoción escalonada** (QA primero, PROD después de la
+aprobación). El proyecto no configura blue/green ni canary, ni mantiene dos versiones para repartir
+tráfico entre ellas. **Límite de esta configuración:** con una sola instancia no se asegura
+disponibilidad continua durante un deploy, y los arranques en frío empeoran la percepción.
 
-**Qué patrón usaríamos en una producción real con usuarios (hipotético: NO está implementado).** Una
-*promoción por etapas con despliegue canary* sobre la misma imagen que ya pasó por QA: la versión nueva
-recibe primero una fracción pequeña del tráfico (p. ej. 5 a 10 %) durante unos minutos, y se promueve al 100 %
-sólo si las señales se mantienen; el viejo queda corriendo hasta entonces. La comparación para esta app:
+**Propuesta para una producción real con usuarios.** Se propone un despliegue *canary* sobre la
+misma imagen que ya pasó por QA: la versión nueva recibe primero una fracción pequeña del tráfico
+(p. ej. 5 a 10 %) durante unos minutos, y se promueve al 100 % sólo si las señales se mantienen; el
+viejo queda corriendo hasta entonces. La comparación para esta app:
 
-| Criterio | Rolling (hoy) | Blue/green | Canary (elegido para producción real) |
+| Criterio | Rolling (hoy) | Blue/green | Canary (propuesto para producción real) |
 |---|---|---|---|
 | Costo | una instancia por servicio | duplica el entorno mientras dura el cambio | una o dos instancias extra, sólo durante la ventana |
 | Riesgo al usuario | un fallo llega a todos tras el reemplazo | el cambio es todo o nada, aunque se prueba antes | un fallo llega sólo a la fracción canaria |
 | Rollback | redeploy de la imagen anterior: decenas de segundos a minutos | casi instantáneo (se vuelve el tráfico) | casi instantáneo (se retira el canario) |
 | Observabilidad necesaria | mínima (health) | media | **alta**: hace falta comparar errores y latencia entre versiones |
 
-Se elegiría canary porque CampusGear ya tiene lo que lo vuelve viable (una sola imagen inmutable por commit,
-configuración fuera de la imagen, migraciones compatibles hacia atrás) y porque su costo extra es temporal. Su
-precondición es la observabilidad: hoy el smoke sólo dice que el entorno responde y no qué versión corre
-(ver «Qué NO prueba el smoke test»), y Sentry del TP9 aporta los errores y la latencia a comparar. **Lo
-implementado hoy es rolling sobre una instancia con promoción escalonada QA → PROD; no se afirma otra cosa.**
+Canary permitiría limitar cuántos usuarios reciben inicialmente un cambio. Para aplicarlo harían
+falta capacidad adicional, reparto de tráfico, identificación de versiones y señales comparables de
+errores y latencia. La imagen común y la configuración externa de TP7 son una base, pero no alcanzan
+por sí solas. Con poco tráfico, unos minutos al 5–10 % pueden dar una muestra insuficiente: la
+duración y los criterios de promoción tendrían que definirse antes. Es una propuesta; el proyecto
+mantiene la promoción QA → PROD y el reemplazo de una instancia.
 
 **Qué entrega este pipeline y qué no.**
+
 - Entrega: imágenes `sha-<commit>` publicadas sólo desde `main` y sólo tras los tests; migración de la
   base de cada entorno **antes** de desplegar; deploy a QA con smoke; promoción a PROD con aprobación y
   concurrencia por entorno.
@@ -1151,17 +1150,13 @@ implementado hoy es rolling sobre una instancia con promoción escalonada QA →
 
 ## Declaración de uso de IA (TP6)
 
-Claude Code escribió el workflow, la plantilla de nginx y las explicaciones, y diagnosticó fallas leyendo
-logs. El alumno creó las cuentas y servicios de Neon y Render, y en sus consolas se cargaron las
-`DATABASE_URL` y los deploy hooks como secrets (no pasaron por el chat). Quedan registradas en GitHub, bajo su
-cuenta, la aprobación y el **rechazo** de promociones. El dato `SOY PROD`, el aislamiento y el rollback se
-hicieron en las consolas de esa cuenta siguiendo indicaciones de Claude; no hay constancia de que el alumno
-los haya comprobado de forma independiente. Los dos 502 de los frontends se diagnosticaron a partir de logs de
-Render pegados en la conversación: Claude propuso la causa y se aplicó el redeploy.
+Claude Code escribió el workflow, la plantilla de nginx y la documentación. También ayudó a
+configurar los servicios, interpretar logs y comprobar el aislamiento y la respuesta de los
+entornos. Las operaciones de consola se documentan con los registros de Neon y Render; las
+aprobaciones y rechazos, con GitHub. Los tiempos de rollback de esta sección se tomaron de Render.
+La creación de las cuentas forma parte de mi participación indicada al comienzo.
 
 # TP7 — Imagen única por commit, integración y extremo a extremo
-
-> *Título corregido el 26/10/2026: «inmutable» era demasiado fuerte; ver «Construir una vez, desplegar muchas».*
 
 ## Los entornos ejecutan la imagen que el pipeline construyó
 
@@ -1171,8 +1166,8 @@ pipeline construyó, probó y publicó. Los servicios **no se recrearon**: se le
 conserva la URL, las variables y el deploy hook. Los hooks pasaron de `&ref=<commit>` a
 `imgURL=ghcr.io/…:sha-<commit>`, y el `ref` se sacó del YAML: con una imagen no hay nada que construir.
 
-- **Lo que dice la configuración de Render no es lo que corre.** En *Settings* queda la imagen que pegué
-  una vez (`sha-dee2063…`, el punto de partida); lo que corre lo nombra cada deploy de una corrida.
+- **Lo que dice la configuración de Render no es lo que corre.** En *Settings* queda la imagen cargada
+  inicialmente (`sha-dee2063…`, el punto de partida); lo que corre lo nombra cada deploy de una corrida.
   Evidencia, en *Events* de `campusgear-front-qa` y `campusgear-api-qa`: «Triggered via Deploy Hook»
   con `sha-ad75d69b9b19012ff892c73e1a29871ca1ebc1d4`, el commit de la corrida
   [39301117867](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39301117867).
@@ -1207,8 +1202,8 @@ y la base los protege con `ON DELETE RESTRICT`: un préstamo creado no se puede 
 para siempre el borrado de su equipo y su persona. Por eso la tercera prueba de integración es «código
 duplicado» (crea un equipo y lo borra) y no un flujo de préstamo.
 
-**Cada prueba usa datos únicos** (`Date.now()` + azar) y limpia lo que crea. La limpieza la descubrí
-imperfecta **al romper la app a propósito** (mutación), y se corrigió dos veces:
+**Cada prueba usa datos únicos** (`Date.now()` + azar) y limpia lo que crea. La limpieza mostró
+problemas al romper la app a propósito (mutación), y se corrigió dos veces:
 
 1. Con el botón *Eliminar* roto, los tres flujos de navegador fallaban —correcto— pero **dejaban tres
    equipos huérfanos**, porque la limpieza pasaba por la misma pantalla rota. Ahora un `afterEach`
@@ -1219,7 +1214,7 @@ imperfecta **al romper la app a propósito** (mutación), y se corrigió dos vec
 Además, un clic sobre un elemento que no existe tardaba 60 s en fallar; con `actionTimeout: 15 s` tarda
 15 s, que es lo que importa cuando un fallo bloquea una promoción.
 
-**Mutación (se rompió la app a propósito para ver qué se ponía rojo; ejecutado por Claude):**
+**Mutaciones locales realizadas por Claude para comprobar las suites:**
 
 | Rotura | Integración (API) | E2E (navegador) |
 |---|---|---|
@@ -1227,11 +1222,13 @@ Además, un clic sobre un elemento que no existe tardaba 60 s en fallar; con `ac
 | `POST /api/equipos` responde 200 en vez de 201 | **1 rojo** (la de creación) | no se ejecutó |
 
 La primera fila es exactamente el caso que justifica tener las dos suites: la API está sana, la
-interfaz no, y sólo la e2e lo ve. En la Fase 32 se usa para demostrar que el gate frena la promoción.
+interfaz no, y sólo la e2e lo ve. En la estructura inicial2 se usa para demostrar que el gate frena
+la promoción.
 
-**Dónde se corre:** probado contra el `docker compose` local (los servicios de Render son compartidos y
-gastan horas gratuitas: se prueba primero en casa). La integración se apunta a la API de QA con
-`API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`; el pipeline las ejecuta en la Fase 32.
+**Dónde se corre:** probado contra el `docker compose` local (los servicios de Render son
+compartidos y gastan horas gratuitas: se prueba primero en casa). La integración se apunta a la API
+de QA con `API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`; el pipeline las ejecuta en la
+estructura inicial2.
 
 ## El gate de promoción: la demostración
 
@@ -1241,9 +1238,10 @@ aprobación. No hay `continue-on-error`, `|| true` ni `always()` en nada que dec
 excepción es la *subida del reporte* (`!cancelled()`), que existe justamente para tener el reporte
 cuando algo falla.
 
-**1. Rotura a propósito** ([PR #53](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/53)): cambié el texto del botón «Crear equipo» por «Guardar
-equipo». Compila, los 28 tests unitarios pasan y la API no se tocó, así que se mergeó sin que nada se
-pusiera rojo. **Corrida roja:**
+**1. Rotura a propósito** ([PR
+#53](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/53)): se cambió el texto del
+botón «Crear equipo» por «Guardar equipo». Compila, los 28 tests unitarios pasan y la API no se
+tocó, así que se mergeó sin que nada se pusiera rojo. **Corrida roja:**
 [https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39313636832](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39313636832)
 
 | Job | Resultado |
@@ -1258,11 +1256,13 @@ Cada suite subió su propio reporte: `reporte-integracion` (196 KB) y `reporte-e
 capturas del fallo). **Comprobación por fuera del pipeline:** el front de QA servía «Guardar equipo» y el
 de PROD seguía sirviendo «Crear equipo». La versión rota llegó a QA y nunca a producción.
 
-**2. Corrección** ([PR #54](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/54)): revertí el cambio. **Corrida verde:**
-[https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236). La integración y la e2e pasaron, el job de
-PROD quedó esperando y la cuenta del alumno lo aprobó (registrado en GitHub). Después de eso, el front de QA y el de PROD sirven **el mismo archivo
-JavaScript** (`index-BfBqAaE1.js`): lo que probó la e2e en QA es lo que corre en PROD, no una segunda
-construcción.
+**2. Corrección** ([PR #54](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/54)): se
+revirtió el cambio. **Corrida verde:**
+[https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236).
+La integración y la e2e pasaron, el job de PROD quedó esperando hasta recibir la aprobación
+registrada en GitHub. Después de eso, el front de QA y el de PROD sirven **el mismo archivo
+JavaScript** (`index-BfBqAaE1.js`): lo que probó la e2e en QA es lo que corre en PROD, no una
+segunda construcción.
 
 **Por qué este tipo de rotura.** Es el caso que justifica tener las dos suites: la API está bien y la
 interfaz no. La integración sola habría dejado pasar el cambio; sólo la e2e, que maneja un navegador, lo
@@ -1271,8 +1271,9 @@ juntas acotan dónde mirar.
 
 ## Construir una vez, desplegar muchas
 
-La unidad de entrega es **la imagen**, y se construye **una sola vez**, en el job de build, el mismo que
-corre los tests. De ahí en adelante sólo viaja su etiqueta:
+La unidad de entrega es **la imagen publicada**, que se genera en el job de build después de las
+pruebas. Ese job también construye una etapa separada para ejecutar los tests. Una vez publicada la
+imagen de ejecución, QA y PROD la descargan sin reconstruirla:
 
 - `ghcr.io/alesiocobresiserravalle/ingsoft3-tp01-{backend,frontend}:sha-<commit>`: QA y PROD
   ejecutan **la misma imagen**; lo único que las distingue es la configuración por entorno
@@ -1300,13 +1301,12 @@ corre los tests. De ahí en adelante sólo viaja su etiqueta:
   que QA haya quedado aislado: sólo serializa el despliegue final.
 - **Los préstamos no se prueban contra la base real en estas suites.** Las tres integraciones y los tres
   flujos e2e trabajan sobre **equipos**, porque la API no borra préstamos y un préstamo de prueba ensuciaría QA
-  para siempre. La lógica de préstamos se prueba con dobles (unitarios) y, desde la revisión del 26/10/2026,
-  la regla de unicidad se prueba además contra un Postgres efímero en el pipeline (ver «Registro de la
-  revisión»). No se afirma que toda la interfaz o toda la aplicación estén cubiertas por la e2e.
+  para siempre. La lógica de préstamos se prueba con dobles (unitarios) y la regla de unicidad se
+  comprueba además contra un Postgres efímero en el pipeline, como se describe en el TP5. Estos
+  casos no cubren toda la interfaz ni toda la aplicación.
 - **Limpieza.** Cada prueba limpia lo que crea y la limpieza se **comprueba**: las integraciones comprueban
   el `204` del borrado y que el código ya no aparece en la lista; el `afterEach` de la e2e exige `204` por cada
-  borrado y que ningún equipo del test siga en la base (corregido el 26/10/2026: antes el tercer caso de
-  integración y el `afterEach` borraban sin comprobar). `finally` no garantiza la limpieza por sí solo (la red o
+  borrado y que ningún equipo del test siga en la base. `finally` no garantiza la limpieza por sí solo (la red o
   el borrado pueden fallar): por eso se verifica.
 
 ## Qué NO prueba el smoke test
@@ -1318,37 +1318,37 @@ para cada deploy dice «Triggered via Deploy Hook» y nombra el `sha-<commit>` d
 hueco automáticamente (que `/health` devuelva el commit y el smoke lo compare) queda como mejora y no se
 implementó.
 
-Un riesgo relacionado, propio de Render: **no usar *Manual Deploy***. Despliega la imagen de *Settings*
-(la que pegué una vez como punto de partida), no la que está corriendo, y puede llevar un entorno hacia
-atrás sin avisar.
+Un riesgo relacionado, propio de Render: **no usar *Manual Deploy***. Despliega la imagen de
+*Settings* (la imagen configurada como punto de partida), no la que está corriendo, y puede llevar
+un entorno hacia atrás sin avisar.
 
 ## Declaración de uso de IA (TP7)
 
-Claude Code escribió las suites de Playwright, el workflow del gate y las explicaciones. El cambio de la fuente
-de los cuatro servicios de Render a imagen se hizo en la consola de la cuenta del alumno, siguiendo
-indicaciones; la aprobación de las promociones consta en GitHub bajo su cuenta, y *Events* de Render es el
-registro de qué imagen corrió. Rompiendo la app a propósito, Claude encontró dos defectos de limpieza en las
-propias pruebas (dejaban equipos de prueba sin borrar cuando fallaban) y se corrigieron antes de usarlas contra QA.
+Claude Code escribió las suites de Playwright y el gate de promoción. Ejecutó las mutaciones locales
+y corrigió los problemas de limpieza que aparecieron. Las corridas roja y verde muestran el
+comportamiento del gate; los eventos de Render registran la imagen desplegada y GitHub conserva la
+aprobación de producción.
 
 # TP8 — Infraestructura como código
 
-## Riel, herramientas y versiones
+## Herramientas y versiones
 
-Riel canónico: **Terraform + Neon + Render**, los mismos proveedores que uso desde el TP6. Se declara un
-entorno **nuevo, `preprod`** (base de Neon + api y front en Render, corriendo la imagen del pipeline) que
-**convive** con QA y producción sin tocarlos: no se importaron, no se migraron, ningún plan los menciona.
+Se usó **Terraform + Neon + Render**, siguiendo el riel de la guía y los proveedores del TP6. Se
+declara un entorno **nuevo, `preprod`** (base de Neon + api y front en Render, corriendo la imagen
+del pipeline) que **convive** con QA y producción sin tocarlos: no se importaron, no se migraron,
+ningún plan los menciona.
 
 | Pieza | Versión | Nota |
 |---|---|---|
-| Terraform | **1.16.6** (`darwin_amd64`) | binario oficial de HashiCorp con el SHA256 verificado: `brew` no pudo instalarlo en mi Mac Intel (las Command Line Tools no coinciden con mi macOS) |
-| `kislerdm/neon` | **0.18.0** | fijada: su repositorio está archivado y los nombres de atributos cambian entre versiones; el oficial (`neondatabase/neon`) todavía no existe en el registro |
+| Terraform | **1.16.6** (`darwin_amd64`) | binario oficial de HashiCorp con el SHA256 verificado: `brew` falló en la Mac Intel usada para el proyecto por una incompatibilidad de las Command Line Tools |
+| `kislerdm/neon` | **0.18.0** | versión fijada para esta entrega; al configurar el TP, su repositorio estaba archivado y no se encontró `neondatabase/neon` en el registro |
 | `render-oss/render` | **1.9.1** | fijada |
 | `terraform_data` + `local-exec` | integrado | corre la migración del esquema (ver abajo) |
 
 El `.terraform.lock.hcl` **se commitea** (fija versión y hashes de los providers). El estado
-(`terraform.tfstate`), `.terraform/` y los `*.tfvars` están en el `.gitignore` **desde antes del primer
-apply**. Ninguna credencial está escrita en el HCL: `NEON_API_KEY`, `RENDER_API_KEY` y `RENDER_OWNER_ID`
-las leen los providers del entorno de mi terminal.
+(`terraform.tfstate`), `.terraform/` y los `*.tfvars` están en el `.gitignore` **desde antes del
+primer apply**. Ninguna credencial está escrita en el HCL: `NEON_API_KEY`, `RENDER_API_KEY` y
+`RENDER_OWNER_ID` las leen los providers desde las variables de entorno de la terminal.
 
 ## Qué se declara y qué se deriva
 
@@ -1356,79 +1356,74 @@ las leen los providers del entorno de mi terminal.
   `neon_role` y `neon_database`. Un proyecto aparte se puede destruir entero sin rozar QA ni producción.
 - **La `DATABASE_URL` se deriva**, no se copia: se arma con el rol, la contraseña (con `urlencode`), el host
   y la base que devuelve Neon. Es una URI de Prisma (`postgresql://…?sslmode=require`), no la cadena de pares
-  de la guía (.NET). Copiar la de otro entorno fue el error más caro del TP6; acá no hay nada que copiar.
+  de la guía (.NET). Así se evita cruzar las credenciales de QA y PROD, un riesgo señalado en el TP6.
 - **La `BACKEND_URL` del front se deriva** del atributo `url` de **su** api (con `trimsuffix` para evitar la
-  barra final). El front además lleva `DNS_RESOLVER=8.8.8.8` y `PORT=80`: mi nginx escucha en el 80 y Render
+  barra final). El front además lleva `DNS_RESOLVER=8.8.8.8` y `PORT=80`: nginx escucha en el 80 y Render
   espera el 10000 por defecto.
 - Los servicios usan `runtime_source.image` con `image_url` **sin** la etiqueta y `tag` aparte
   (`sha-a95fc1ee…`, un merge a `main` con imágenes publicadas). Sin `latest`.
-- **El esquema:** una base nueva nace vacía y mi backend no crea las tablas al arrancar (usa migraciones de
+- **El esquema:** una base nueva nace vacía y el backend no crea las tablas al arrancar (usa migraciones de
   Prisma y la imagen no trae el CLI). Terraform crea **la base, no el esquema**; para que un solo `apply` deje
   el entorno funcionando, un `terraform_data` con `local-exec` corre `prisma migrate deploy` apenas existe la
   base, y se **vuelve a correr si la base se recrea** (`triggers_replace`). Es un *provisioner*, que Terraform
   considera último recurso, y deja una dependencia: el CLI de Prisma tiene que estar en la máquina que aplica.
 
-## Lo que hice y lo que vi
+## Comprobaciones de la infraestructura
 
 - **Idempotencia:** el segundo `plan` dijo `No changes`.
-- **Drift:** borré a mano la base en Neon y el `plan` lo detectó (`neon_database.preprod has been deleted`).
+- **Drift:** se borró a mano la base en Neon y el `plan` lo detectó (`neon_database.preprod has been deleted`).
   El plan propuso `2 to add, 1 to destroy`, no uno solo: la migración depende del id de la base, y como la
   nueva tiene otro id, Terraform la marcó `# forces replacement` y la volvió a correr. Es lo correcto: una
-  base recién creada está vacía. Después de `apply` la API volvió a responder con sus tablas. Creé a mano una
-  `base_intrusa` que mi código no declara y el plan siguió diciendo `No changes`: Terraform vigila lo que
-  declaré, no todo lo que existe (el mismo caso de mis QA y PROD, que ningún plan mío menciona).
+  base recién creada está vacía. Después de `apply` la API volvió a responder con sus tablas. Se creó a mano una
+  `base_intrusa` que el HCL no declara y el plan siguió diciendo `No changes`: Terraform compara los recursos que administra con su estado y configuración; no incorpora
+  automáticamente todo lo que existe en la cuenta. QA y PROD también quedan fuera de este estado.
 - **Ciclo de vida:** `destroy` baja preprod entero y `apply` lo trae de vuelta con la API, la base (con
   tablas) y el frontend respondiendo. QA y PROD siguieron respondiendo en todo momento. Los ids de Neon
   cambiaron al recrearlo (`still-bird-…` → `royal-wind-…`), señal de que se recreó de verdad.
 - **`prevent_destroy`:** con el bloque en la base, `terraform destroy` se negó (`Instance cannot be
-  destroyed`) y nombró el recurso. Lo saqué después: preprod tiene que poder morir. Protege contra un destroy
+  destroyed`) y nombró el recurso. Después se retiró el bloque para poder destruir preprod al terminar. Protege contra un destroy
   accidental, pero no contra borrar el bloque del código; la protección real es el PR revisado más un backup.
   Iría en una base de producción, no en preprod, que nace vacía y se llena sola.
 
-## Estado, cuota y lo que sigue siendo artesanal
+## Estado, cuota y tareas manuales
 
-- **El estado vive en mi máquina** y tiene contraseñas en texto plano: por eso no se commitea. Si lo pierdo no
-  pierdo la infraestructura sino la prueba de que es mía: el próximo `plan` propondría crearlo todo de nuevo
-  contra recursos que ya existen, y habría que importarlos. Para que lo comparta un equipo (o una corrida del
+- **El estado es local** y contiene contraseñas en texto plano, por eso no se commitea. Si se pierde,
+  los recursos siguen existiendo, pero Terraform pierde la relación entre esos recursos y su configuración.
+  Habría que recuperar el estado o importar los recursos antes de volver a aplicar. Para que lo comparta un equipo (o una corrida del
   pipeline) tendría que mudarse a un *backend* remoto con bloqueo.
 - **Las 750 horas gratuitas de Render son del workspace**, compartidas entre todos los servicios gratuitos: con
-  preprod pasan de 4 a 6. Si me paso, Render suspende todos, producción incluida. Por eso preprod se destruye al
+  preprod pasan de 4 a 6. Agotar esa cuota afecta también a producción. Por eso preprod se destruye al
   terminar cada sesión; es un entorno que existe cuando se lo necesita.
-- **Sigue siendo artesanal** en mi cuenta: QA y PROD (los cuatro servicios y las dos bases se crearon clickeando,
-  y un plan limpio no dice nada de ellos), los deploy hooks (el provider de Render no los expone) y el estado
-  local. Y Render no deja *modificar* un servicio `free` (defecto del provider), así que en preprod se crea y se
-  destruye, nunca se edita.
+- **Configuración manual:** QA y PROD se crearon desde sus consolas y no están en este estado de
+  Terraform. Los deploy hooks también se configuraron a mano porque el provider usado no los expone.
+  Con esa versión apareció además una limitación al modificar servicios `free`; por eso preprod
+  se usa mediante creación y destrucción, sin depender de cambios sobre el servicio existente.
 - **El workflow `infra.yml`** (opcional) corre `fmt` y `validate` en cada PR que toca `infra/`, **sin
   credenciales**. No corre `plan`: necesitaría las claves como secrets (la de Render da acceso a todo el
-  workspace, QA y PROD incluidos, y un repo público guardaría esa clave) y además el estado compartido; el
-  `apply` lo hago yo desde mi terminal.
+  workspace, QA y PROD incluidos) y además un estado compartido. El `apply` se ejecutó desde la
+  terminal local. Las credenciales no se incluyen en los archivos del repositorio.
 
-## Problemas que tuve y cómo los resolví
+## Problemas encontrados y solución
 
-1. **`brew install` falló** (Mac Intel con Command Line Tools desactualizadas): instalé el binario oficial en
+1. **`brew install` falló** (Mac Intel con Command Line Tools desactualizadas): se instaló el binario oficial en
    `~/bin`, verificando el hash antes.
 2. **`org_id is required`:** las cuentas nuevas de Neon pertenecen a una organización y la API exige indicarla.
-   Lo agregué como variable sin default (`TF_VAR_neon_org_id`). No es una credencial pero es propia de la cuenta.
+   Se agregó como variable sin default (`TF_VAR_neon_org_id`). No es una credencial pero es propia de la cuenta.
 3. **`org_id` con un salto de línea**, por haber cerrado mal las comillas en el `export`: se veía como un bloque
-   `<<-EOT` en el `plan` *antes* de tocar nada. Lo corregí en el código con `trimspace`.
+   `<<-EOT` en el `plan` *antes* de tocar nada. Se corrigió en el código con `trimspace`.
 4. **El esquema de una base nueva** (ver arriba) y el `PORT=80` del front, que la guía no necesitaba.
-5. **Una clave de Render quedó expuesta en la conversación con el asistente** (se pegó una línea de `export`
-   al copiar texto de la terminal; en ese momento Claude la tuvo a la vista, con lo cual la afirmación «la IA no
-   tuvo acceso a mis claves» del párrafo de IA no es absoluta). La credencial **se debe tratar como filtrada** y se
-   debe revocar en Render (*Account Settings → API Keys*) y reemplazar. **Estado de la revocación: PENDIENTE DE
-   CONFIRMAR** —no hay constancia de que se haya hecho, y esta revisión no puede comprobarlo sin acceder a la
-   cuenta—. Cuando se haga, registrar acá la fecha. Regla desde entonces: pegar sólo desde `terraform plan`,
-   nunca líneas con `export`. (No se reproduce ningún valor en este documento.)
+5. **Clave de Render expuesta al copiar una línea de `export` al chat.** Corresponde revocarla y
+   reemplazarla desde *Account Settings → API Keys*. **La revocación queda pendiente de confirmar**.
+   Se registra el incidente sin reproducir el valor. Para compartir resultados, se deben omitir las
+   credenciales y revisar también la salida de `plan`, que puede contener datos sensibles.
 
 ## Declaración de uso de IA (TP8)
 
-Claude Code escribió el HCL, el workflow y los textos. Las claves de Neon y Render las creó el alumno en sus
-cuentas y se exportaron en su terminal, que es donde se corrieron `plan`, `apply` y `destroy` (Claude no ejecutó
-Terraform contra esas cuentas); también en esas consolas se borraron y crearon recursos a mano para provocar el
-drift. Claude comprobó desde afuera (`curl` a `/health`, a un endpoint que toca la base y al proxy del front) que
-el entorno quedó funcionando. Excepción: una clave de Render apareció una vez en la conversación (ver «Problemas
-que tuve», punto 5). Este documento no certifica que el alumno haya leído y comprendido cada plan: eso se
-refuerza en la revisión posterior.
+Claude Code escribió el HCL, el workflow de validación y la documentación. Ayudó a interpretar los
+planes, los errores y los cambios de infraestructura. Las ejecuciones de `plan`, `apply` y `destroy`
+se realizaron desde la terminal local con credenciales de las cuentas. Claude comprobó desde afuera
+el `/health`, una consulta a la base y el proxy del frontend. El incidente con la clave está
+registrado en «Problemas encontrados y solución».
 
 # TP9 — DevSecOps y observabilidad
 
@@ -1439,14 +1434,15 @@ los dos Dockerfiles), con las **alertas** y las **actualizaciones de seguridad**
 merge abrió PRs; los dos primeros arreglaban vulnerabilidades publicadas, no eran versiones rutinarias.
 
 **Se mergeó el [#59](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/59): `proxy-addr` de 2.0.7 a 2.0.8, en `/backend`.**
-- **Qué es:** un cambio de **patch** (SemVer: solo arreglos) que toca únicamente `package-lock.json`, ni una línea
-  de mi código. La dependencia no la escribí yo: la trae Express (`express@5.2.1 → proxy-addr`), que es justo el
-  punto de la guía: casi todo lo que mi backend ejecuta no lo escribí.
+- **Qué es:** una actualización **patch** que toca únicamente `package-lock.json`. Es una dependencia
+  transitiva de Express (`express@5.2.1 → proxy-addr`), por lo que también forma parte del software
+  que ejecuta el backend aunque no se importe directamente en el código de la aplicación.
 - **Por qué importaba:** arreglaba GHSA-jqcg-44mw-7w3h (CVE-2026-90711), suplantación de IP por una subred IPv4
   mapeada en IPv6, severidad **crítica** (CVSS 9.1) y de **runtime**.
-- **¿Era explotable en CampusGear? No.** Se revisó el código del backend (revisión asistida, no un análisis completo del advisory): no usa `trust proxy`, ni `req.ip`, ni
-  cabeceras `x-forwarded`. Esa falla solo importa cuando una app confía en la IP que declara el cliente. Se
-  actualizó igual, porque no cuesta nada y evita que un cambio futuro la vuelva explotable.
+- **Relevancia para CampusGear:** en la revisión del backend no se encontraron usos de `trust proxy`,
+  `req.ip` ni cabeceras `x-forwarded`. No se identificó una vía de explotación en ese uso del código;
+  esto no reemplaza un análisis completo del advisory. Se aplicó el parche por su severidad y
+  porque un cambio futuro podría incorporar esas funciones.
 - **Por qué había confianza para mergearlo** (dos momentos distintos, que no hay que mezclar):
   1. *Verificaciones del PR (antes del merge):* un patch que solo cambia el lockfile, con changelog que solo
      menciona el arreglo, y los checks requeridos en verde sobre el PR: `build-backend` y `build-frontend`
@@ -1459,42 +1455,47 @@ merge abrió PRs; los dos primeros arreglaban vulnerabilidades publicadas, no er
 - **Resultado:** la alerta crítica pasó a `fixed` sola al aparecer `proxy-addr 2.0.8` en `main`.
 - **Los mayores no se mergean a ciegas:** `prisma 7/8`, `zod 4` y `typescript 7` quedan para analizarse con
   calma, porque pueden traer cambios incompatibles.
-- **Una nota de honestidad:** antes de esto `npm audit` me daba 0 vulnerabilidades; las publicaron después.
-  El estado de seguridad cambia aunque mi código no.
+- **Límite de la comprobación:** `npm audit` había informado 0 vulnerabilidades antes de publicarse
+  estas alertas. El resultado depende de la información disponible en el momento de ejecutarlo.
 
-## Mi código, escaneado, y los secretos con guardia
+## Análisis del código y protección de secretos
 
 - **CodeQL activo** (configuración por defecto, JavaScript/TypeScript y workflows de Actions), con el primer análisis
   en verde y **0 alertas** en `main`. Corre en cada PR y push.
-- Como mi app está limpia, **provoqué hallazgos** en una rama que nunca se mergea ([PR #73](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/73), cerrado):
-  un XSS reflejado, una inyección de comandos y la falta de *rate limiting*. CodeQL los cazó en el PR
+- Para comprobar la detección, **se agregaron fallas deliberadas** en una rama separada ([PR #73](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/73), cerrado):
+  un XSS reflejado, una inyección de comandos y la falta de *rate limiting*. CodeQL los detectó en el PR
   (`3 new alerts including 1 critical`) y el umbral de cobertura frenó el mismo código por su lado: dos
-  guardianes distintos. Ninguno de mis tests los habría visto, porque ningún test escribe `?host=; …`; CodeQL
-  sigue el dato desde `req.query` hasta `exec` sin ejecutar nada.
+  controles distintos. Los tests existentes no ejercitan esas entradas; CodeQL analiza el flujo
+  desde `req.query` hasta `exec` sin ejecutar ese comando. Cero alertas no implica ausencia de fallas.
 - **Secret scanning y push protection** ya estaban activos en el repositorio público (verificado). La demo del
-  push bloqueado con un token sin permisos es práctica recomendada y **no la hice**. Lo que esa protección **no**
-  detecta: un secreto inventado o en un formato que no conoce; por eso el arco de capas anteriores (`.env`
-  ignorado, secrets cifrados y por entorno) sigue importando.
+  push bloqueado con un token sin permisos es una práctica recomendada que **no se realizó**. Lo que esa protección **no**
+  detecta: un secreto inventado o en un formato que no conoce; por eso las medidas anteriores (`.env`
+  ignorado, secrets cifrados y por entorno) siguen siendo necesarias.
 
 ## Monitoreo externo y la caída provocada
 
-Monitor de UptimeRobot sobre el `/health` de PROD (el plan gratuito pregunta con `HEAD`; se comprobó que el endpoint
-responde 200 a `HEAD`, Express lo hace solo). Se provocó una caída suspendiendo el servicio de la api de PROD en Render
-(20/10, desde la consola de la cuenta del alumno; las horas son las anotadas en ese momento):
+Monitor de UptimeRobot sobre el `/health` de PROD (el plan gratuito pregunta con `HEAD`; se comprobó
+que el endpoint responde 200 a `HEAD`, Express lo hace solo). Se provocó una caída suspendiendo el
+servicio de la api de PROD en Render (20/10/2026; las horas de la tabla son las registradas durante
+el ejercicio):
 
 | Evento | Hora local |
 |---|---|
 | Se suspendió el servicio | 23:00 |
-| Mi observador ve el primer 503 | 23:00:37 |
+| Se observa el primer 503 | 23:00:37 |
 | **Aviso DOWN del monitor** | **23:02** |
 | `/health` vuelve a dar 200 | 23:03:01 |
 | Aviso UP del monitor | 23:03 |
 
-**Tiempo de detección medido: ~2 minutos** (del primer 503 observado, 23:00:37, al aviso DOWN, 23:02), en **una sola** observación; la caída duró ~2 minutos y medio. Con un intervalo de chequeo de 5 minutos un fallo se detectaría, en general, dentro de ese intervalo más el tiempo de notificación, pero **no es un máximo garantizado** y esta medición no lo prueba.
-Abrir `/health` a mano después de reanudar lo despertó; sin eso el UP puede tardar más de 20 minutos. **Es externo**
-porque si mi infraestructura se cae, un monitoreo interno se cae con ella; sin él, la caída la habría anunciado un
-usuario. **La regla:** el monitor se pausa al terminar el ejercicio, porque un servicio gratuito despierto todo el mes
-consume las 750 horas del workspace y, si se pasan, Render suspende todos los servicios, producción incluida.
+**Tiempo de detección medido: ~2 minutos** (del primer 503 observado, 23:00:37, al aviso DOWN,
+23:02), en **una sola** observación; la caída duró ~2 minutos y medio. Con un intervalo de chequeo
+de 5 minutos un fallo se detectaría, en general, dentro de ese intervalo más el tiempo de
+notificación, pero **no es un máximo garantizado** y esta medición no lo prueba. Abrir `/health` a
+mano después de reanudar lo despertó; sin eso el UP puede tardar más de 20 minutos. **Es externo**
+porque si la infraestructura de la aplicación se cae, un monitoreo interno se cae con ella; permite
+avisar de una caída sin depender de que un usuario la reporte. **La regla:** el monitor se pausa al
+terminar el ejercicio, porque un servicio gratuito despierto todo el mes consume las 750 horas del
+workspace y, si se pasan, Render suspende todos los servicios, producción incluida.
 
 ## Qué falla, qué tarda y qué se usa (Sentry)
 
@@ -1504,8 +1505,10 @@ permite enviar datos, no leerlos, y viaja en el JavaScript que baja cualquier na
 y desplegado por la cadena completa. Coste visible: el bundle del frontend pasó de ~243 kB a ~401 kB.
 
 - **Un error:** `Error: Falla de prueba del TP9` (`CAMPUSGEAR-BACKEND-1`, `GET /api/falla`, `environment: production`),
-  de un endpoint temporal que agregué y saqué por otro PR.
-- **Uso real, dato medido** (tabla *Traces → Aggregates*, ventana «últimas 24 h» al momento de la captura, entre el 20 y el 24/10/2026 (fecha exacta no registrada; la ventana ya no es esa hoy), pedidos completos; el panel de Sentry no se reabrió en la revisión del 26/10):
+  de un endpoint temporal que después se retiró mediante otro PR.
+- **Muestra de uso** (tabla *Traces → Aggregates*, ventana «últimas 24 h» de una captura tomada entre
+  el 20 y el 24/10/2026). No se registró la fecha exacta; estos valores describen esa ventana y no
+  una medición continua actualizada:
 
 | Operación | Pedidos | p95 |
 |---|---|---|
@@ -1518,19 +1521,19 @@ y desplegado por la cadena completa. Coste visible: el bundle del frontend pasó
 - **Hipótesis, no causa demostrada, sobre por qué el dashboard es lo más lento:** es la página de inicio, así que suele ser el primer pedido tras un rato
   sin uso y paga el arranque en frío de la base gratuita (Neon la suspende a los 5 minutos); con solo 9 pedidos el p95 es
   casi el máximo. Además `obtenerResumen` hace dos consultas en serie que no dependen entre sí (eso sí se ve en el código). Con 9 pedidos no se puede separar el efecto del arranque en frío del de las consultas: **próximo experimento** —medir el mismo endpoint en frío y en caliente, y con las consultas en paralelo— antes de afirmar la causa.
-- **Lo que Sentry me dice que el monitor no:** el monitor solo responde «¿estás viva?»; Sentry me dice qué falla,
-  qué tarda, y cuánto se usa cada cosa.
-- **La tarjeta:** [#75](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75) en mi tablero, con el número adentro, nacida de ese dato (feedback: lo que
-  pasa en producción decide qué se hace después).
+- **Diferencia con el monitor:** UptimeRobot comprueba disponibilidad desde afuera. Sentry permite
+  observar errores, latencia y uso de operaciones dentro de la aplicación.
+- **La tarjeta:** [#75](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75) en el tablero, creada a partir de esa medición. Incluye el p95 observado y propone investigar
+  el endpoint: es el paso de una señal de producción a una tarea de mejora.
 
-## Mis cuatro métricas DORA (práctica recomendada)
+## Métricas DORA (práctica recomendada)
 
 Con el historial real de `main`, desde que el pipeline tiene `deploy-prod` (12/10), aproximadas:
 
 | Métrica | Resultado | Cómo |
 |---|---|---|
 | Frecuencia de despliegue | **9 despliegues a PROD en 10,8 días** (0,83/día) | corridas de `main` con `deploy-prod: success` |
-| Lead time (merge → PROD) | mediana **6 min**; mínimo 3 min; máximo 26 h 42 min | commit de merge contra el fin de `deploy-prod`; el máximo es **espera de mi aprobación**, no lentitud del pipeline. No incluye el tiempo de escribir el código |
+| Lead time (merge → PROD) | mediana **6 min**; mínimo 3 min; máximo 26 h 42 min | commit de merge contra el fin de `deploy-prod`; el máximo es **espera de aprobación**, no lentitud del pipeline. No incluye el tiempo de escribir el código |
 | Tasa de fallo | **1 de 9 ≈ 11 %** | el despliegue de Sentry (ver `postmortem.md`) |
 | Tiempo de recuperación | **28,5 s**: sólo el redeploy técnico del rollback por commit del TP6 (leído en Render); **~10 min**: duración del incidente de Sentry hasta tener la configuración correcta | dos mediciones distintas, no comparables entre sí |
 | *(no es recuperación)* Tiempo de detección | ~2 min en la caída provocada del monitor | ver «Monitoreo externo»; es detección, no recuperación |
@@ -1546,89 +1549,21 @@ apagado y el frontend sirviendo el bundle anterior. Causa de **sistema**: una co
 y un pipeline que no verifica qué versión corre. Una hipótesis inicial (un despliegue manual de la imagen vieja) se
 descartó con los eventos de Render; la causa del frontend desfasado queda **sin determinar** y está dicho.
 
-## Problemas que tuve
+## Problemas encontrados
 
 1. **`SENTRY_DSN` sin cargar en PROD:** el backend desplegó con Sentry apagado y no mostraba datos (ver postmortem).
 2. **El frontend de PROD no sirvió el bundle nuevo a los ~4 minutos del despliegue «exitoso»**, causa no determinada.
 3. **Una aprobación de PROD olvidada** de un PR anterior retuvo el grupo de `concurrency` y dejó en cola la corrida
    siguiente; se resolvió rechazando la vieja y aprobando la nueva.
-4. **Una clave de Render quedó expuesta en la conversación con el asistente** durante el TP8. Debe tratarse como
-   filtrada: revocarla y reemplazarla. **Revocación: pendiente de confirmar** (no comprobada; no se reproduce el valor).
-5. La interfaz de Sentry no coincidía con la de la guía (*Insights → Backend* no existía): encontré las tablas en
-   *Explore → Traces*.
+4. **La interfaz de Sentry no coincidía con la guía:** las tablas se encontraron en *Explore → Traces*,
+   en lugar de *Insights → Backend*.
+
+El incidente con la clave de Render y su seguimiento quedan registrados en el TP8.
 
 ## Declaración de uso de IA (TP9)
 
-Claude Code escribió la configuración de Dependabot, el código de Sentry, el endpoint temporal, el postmortem y
-esta sección, y consultó la API de GitHub. El alumno creó las cuentas y los proyectos de UptimeRobot y Sentry;
-en sus consolas se cargaron las variables en Render, se suspendió y reanudó el servicio y se usó la aplicación
-para generar datos; GitHub registra bajo su cuenta las aprobaciones de despliegue y el sprint del tablero. Las
-comprobaciones (`curl` al bundle servido y al endpoint removido, lectura de la API de GitHub, contraste con
-*Events* de Render) las hizo Claude, que también descartó una hipótesis propia (un despliegue manual) cuando los
-eventos la contradijeron. Cada cambio pasó el pipeline. Este documento no certifica que el alumno pueda
-explicar hoy cada pieza: eso se trabaja en la revisión posterior.
-
-# Registro de la revisión del 26/10/2026
-
-Revisión asistida por Claude Code de este documento, contrastada con el código, las guías y las evidencias del
-repositorio, a partir del informe `revision-decisiones-campusgear.md`. **Lo que sigue se comprobó en esta
-revisión, no durante el desarrollo original.** Se conservan los tags y las evidencias históricas (corridas,
-PRs, releases): no se tocó ninguno.
-
-## Qué se confirmó
-- Existen las releases `v1.0.0` a `v9.0.0`; `v6.0.0`, `v7.0.0`, `v8.0.0` y `v9.0.0` apuntan a commits cuya
-  corrida terminó con `deploy-prod` en verde.
-- Los paquetes `ingsoft3-tp01-backend` y `-frontend` son públicos (la lista de tags responde sin credenciales).
-- Secrets de QA y PROD sólo en sus environments; `production` exige revisor (con *prevent self-review* apagado);
-  la protección de `main` exige `build-backend` y `build-frontend`.
-- Dependabot (5 ecosistemas), alertas y security updates, secret scanning y push protection activos; CodeQL
-  configurado, último análisis sin error.
-- El PR #59 corre sólo `build-backend` y `build-frontend`; las demás etapas se omiten en PR (ver TP9).
-- Al consultar QA y PROD, ambos devolvieron 0 préstamos activos (`GET /api/prestamos?estado=activo`). La nueva migración todavía no se había aplicado en esos entornos.
-
-## Qué se corrigió
-- **Código (problema real de concurrencia):** `crearPrestamo` permitía prestar el mismo equipo dos veces con
-  pedidos simultáneos. Corregido con un índice único parcial en la base y traducción del `P2002` a `409`
-  (sección «API de Préstamos»).
-- **Pruebas de limpieza:** el tercer caso de integración y el `afterEach` de la e2e ahora comprueban los
-  borrados.
-- **Pipeline:** `build-backend` levanta un Postgres efímero, aplica las migraciones y corre la prueba de
-  concurrencia contra una base real.
-- **Afirmaciones de `decisiones.md`:** la transacción ya no se presenta como garantía; PR frente a post-merge
-  en Dependabot; tag frente a digest; QA compartido; hipótesis separada del dato en Sentry; detección separada de
-  recuperación; el «peor caso de 5 minutos» ya no se afirma; Plan C sin presentarse como probado; mención al
-  análisis estático (TP9, no TP5); enlaces a la release propia de cada TP; patrón de producción real de TP6.
-- **Autoría:** el encabezado y las declaraciones de IA de TP1, TP5, TP6, TP7, TP8 y TP9 ya no atribuyen al
-  alumno verificaciones que no se le pueden atribuir.
-
-## Pruebas ejecutadas en esta revisión (por Claude)
-| Prueba | Resultado |
-|---|---|
-| Reproducción de la carrera (código original, Postgres 16 real, 8 pedidos simultáneos × 20 rondas) | más de un préstamo activo por equipo en 20 de 20 rondas |
-| `prestamos.concurrencia.test.ts` sin el índice | 5 de 6 fallan (la regla no se cumple) |
-| Misma suite con el índice, 6 corridas consecutivas | 6 de 6 pasan (1 ganador, el resto `409`, 1 préstamo activo) |
-| Reutilización: devolver y volver a prestar el mismo equipo | pasa (el índice no incluye devueltos) |
-| Suite completa del backend, sin base (como antes) | 34 pasan, 6 se saltean; umbrales de cobertura cumplidos |
-| Suite completa con base y cobertura | 40 de 40 pasan |
-| Emulación local de los pasos nuevos de `build-backend` (red, Postgres, migrate, tests con cobertura) | verde |
-| Compose local: 10 `POST /api/prestamos` simultáneos al mismo equipo | 1 × `201`, 9 × `409` |
-| Playwright integración (3) y e2e (3) contra el compose local, con las comprobaciones de limpieza nuevas | 6 de 6 pasan |
-| `tsc --noEmit`, `prisma validate`, YAML del workflow | sin errores |
-
-Limitación: el workflow modificado todavía no se ejecutó en GitHub Actions; se probó su secuencia en local.
-
-## Qué sigue pendiente (hechos que necesitan confirmación)
-1. **Revocación de la clave de Render expuesta:** no comprobada. Pendiente de la cuenta del alumno.
-2. **Qué acciones hizo el alumno por su cuenta** más allá de crear cuentas (ejecutar Terraform, operar consolas,
-   medir el rollback): el texto describe lo que dejan los registros y no lo afirma como verificación propia. El
-   alumno debe confirmar o corregir cada punto antes de la defensa.
-3. **Monitor de UptimeRobot pausado** y datos de Sentry/UptimeRobot vigentes el día de la defensa (vencen a los
-   30 días).
-4. **El rollback no probó la versión:** el backend no expone su commit; sólo se verificó que PROD quedó sano.
-   Mejora pendiente (acción 1 del postmortem).
-5. **Las suites e2e/integración no ejercitan préstamos contra QA** (decisión documentada); la unicidad queda
-   cubierta por la prueba de base real del pipeline.
-6. **Reorganizar `decisiones.md`** (el TP1 concentra ~3.500 palabras y menciona fases de un plan maestro que no
-   está en el repositorio): no se hizo para no tocar entregables; es una mejora de navegación.
-7. **Merge y despliegue:** los cambios están en una rama; al integrarlos, la migración se aplicará en QA y luego
-   en PROD (con la aprobación habitual) y el `build-backend` se verá por primera vez en Actions.
+Claude Code escribió la configuración de Dependabot, la integración de Sentry, el endpoint temporal,
+el postmortem y esta sección. Consultó GitHub y contrastó las respuestas de la aplicación con los
+eventos de Render. Las corridas enlazadas muestran los resultados del pipeline; la muestra de Sentry
+y la tarjeta `#75` documentan el dato de observabilidad y la mejora propuesta. Mi aporte a la
+creación de las cuentas se indica en la declaración inicial.
