@@ -35,10 +35,30 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
+      # La garantía "un equipo no tiene dos préstamos activos" la da un índice de
+      # PostgreSQL: sólo se puede probar contra una base real. Postgres efímero,
+      # en una red propia del job, con las migraciones aplicadas (las mismas que
+      # corren en QA y PROD). `-h 127.0.0.1`: durante el arranque inicial el
+      # servidor temporal sólo escucha por socket y pg_isready daría un falso listo.
+      - name: Levantar un Postgres descartable para la prueba de concurrencia
+        run: |
+          docker network create testnet
+          docker run -d --name pgtest --network testnet -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci postgres:16-alpine
+          for i in $(seq 1 30); do
+            docker exec pgtest pg_isready -h 127.0.0.1 -U postgres && break
+            sleep 2
+          done
+          docker run --rm --network testnet \
+            -e DATABASE_URL="postgresql://postgres:ci@pgtest:5432/ci?schema=public" \
+            --entrypoint npx backend:test prisma migrate deploy
+
       - name: Correr tests con cobertura (el umbral rompe el build)
         run: |
           mkdir -p coverage-backend
-          docker run --rm -v "$PWD/coverage-backend:/reports" backend:test
+          docker run --rm --network testnet \
+            -e RUN_DB_TESTS=1 \
+            -e DATABASE_URL="postgresql://postgres:ci@pgtest:5432/ci?schema=public" \
+            -v "$PWD/coverage-backend:/reports" backend:test
 
       - name: Resumen de cobertura en el job
         if: ${{ !cancelled() }}

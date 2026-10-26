@@ -56,6 +56,20 @@ describe("crearPrestamo (regla 2: un equipo prestado no se vuelve a prestar)", (
     expect(db.prestamo.create).toHaveBeenCalledOnce();
   });
 
+  it("traduce la violación de unicidad de la base (P2002, pedido simultáneo perdedor) al mismo 409", async () => {
+    db.prestamo.findFirst.mockResolvedValue(null); // la lectura vio "libre"…
+    db.prestamo.create.mockRejectedValue(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }));
+
+    await expect(crearPrestamo(entrada)).rejects.toBeInstanceOf(ConflictError); // …pero el índice lo frenó
+  });
+
+  it("no disfraza de 409 cualquier otro error de la base", async () => {
+    db.prestamo.findFirst.mockResolvedValue(null);
+    db.prestamo.create.mockRejectedValue(Object.assign(new Error("conexión caída"), { code: "P1001" }));
+
+    await expect(crearPrestamo(entrada)).rejects.toThrow("conexión caída");
+  });
+
   it("falla con NotFoundError si el equipo no existe", async () => {
     db.equipo.findUnique.mockResolvedValue(null);
 

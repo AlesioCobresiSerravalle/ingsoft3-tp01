@@ -1,5 +1,16 @@
 # Decisiones — CampusGear
 
+> **Autoría y alcance de este documento (aclarado en la revisión del 26/10/2026).** La implementación
+> (código, pipeline, Terraform, pruebas) y la redacción de este documento fueron generadas por Claude
+> (Claude Code), a pedido del alumno. La participación del alumno fue crear las cuentas de los servicios
+> (GitHub, Neon, Render, UptimeRobot, Sentry) y las acciones que sólo puede registrar su cuenta (merges,
+> aprobación o rechazo de promociones en GitHub, claves en sus consolas). **Las verificaciones técnicas que
+> aquí se describen (comandos, `curl`, mutaciones, mediciones) las ejecutó Claude durante el desarrollo;
+> el alumno no las repitió por su cuenta salvo que se diga expresamente.** El texto usa la primera persona
+> por convención del documento, no como constancia de que el alumno ejecutó cada paso. Lo comprobado
+> **después**, en la revisión asistida del 26/10/2026, está fechado y listado en la sección
+> «Registro de la revisión del 26/10/2026» al final de este archivo.
+
 ## Enlaces de este TP (TP9)
 
 | Qué | Dónde |
@@ -12,6 +23,7 @@
 | Tarjeta del tablero nacida de un dato de Sentry | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75 |
 | Postmortem sin culpables | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/blob/main/postmortem.md |
 | Corrida que llevó el parche de `proxy-addr` a PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39470387567 |
+| **Release de este TP (v9.0.0)** | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v9.0.0 |
 | Release del TP8 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v8.0.0 |
 
 ## Enlaces del TP7
@@ -33,6 +45,7 @@
 | PR de los entornos con imagen (`imgURL`) | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/50 |
 | PR de las suites de Playwright | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/51 |
 | PR del gate de promoción | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/52 |
+| **Release de este TP (v7.0.0)** | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v7.0.0 |
 | Release del TP6 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v6.0.0 |
 
 ## Enlaces del TP6
@@ -52,6 +65,7 @@
 | PR que agregó el publicado de imágenes | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/45 |
 | PR que sacó la configuración de la imagen | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/46 |
 | PR que agregó el deploy a QA y PROD | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/47 |
+| **Release de este TP (v6.0.0)** | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v6.0.0 |
 | Release del TP5 | https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/releases/tag/v5.0.0 |
 
 Documento único y acumulativo: un bloque por TP (TP1 … TP9).
@@ -102,12 +116,11 @@ Usé Claude (Anthropic) como asistente durante todo el TP. Concretamente:
   qué esperar en cada paso (por qué se rechaza el push, por qué aparece el conflicto, qué significa
   cada marcador).
 
-Cómo lo verifiqué: no di por buena ninguna afirmación sin comprobarla yo mismo. Cada comando de Git
-se ejecutó de verdad en mi máquina y la salida de la terminal (incluido el rechazo del push) es la
-real, no una simulación. Cada paso hecho en la web de GitHub —crear los Pull Requests, resolver el
-conflicto, publicar la release— lo hice yo mismo, viendo el resultado en la propia interfaz de
-GitHub y comparándolo contra lo que la guía de la cátedra describe. Las cuatro capturas de
-`evidencias.md` son la prueba de que lo que se describe en este documento efectivamente ocurrió.
+Cómo se verificó (corregido el 26/10/2026): los comandos de Git y la salida de terminal descritos (incluido el
+rechazo del push) se ejecutaron durante el desarrollo, guiados por Claude; el alumno creó la cuenta y el
+repositorio, y GitHub registra bajo su cuenta los Pull Requests, la resolución del conflicto y la release. Este
+documento no certifica que el alumno haya comprobado por su cuenta cada afirmación. Las capturas de
+`evidencias.md` son la prueba de que las pantallas descritas existieron.
 
 ## Modelo de datos (previo al TP2)
 
@@ -216,11 +229,19 @@ Las 6 reglas del enunciado se probaron una por una por HTTP, contra el servidor 
    que pueda dejar un equipo "disponible" con un préstamo activo sin devolver, porque el estado no
    se guarda por separado: se lee siempre de la misma fuente.
 
-**Regla 1 y 2 dentro de una transacción:** `crearPrestamo` corre en un `prisma.$transaction`: busca
-el equipo, la persona, chequea que no haya un préstamo activo, y recién ahí crea el nuevo préstamo.
-Esto cierra la condición de carrera de dos requests casi simultáneos prestando el mismo equipo (ver
-sección 5 del plan maestro): la segunda transacción ve el préstamo que acaba de confirmar la
-primera.
+**Regla 1 y 2: transacción para el mensaje, índice único parcial para la garantía.** `crearPrestamo`
+corre en un `prisma.$transaction`: busca el equipo, la persona, chequea que no haya un préstamo activo, y
+recién ahí crea el nuevo préstamo. *Corrección del 26/10/2026:* la versión original de este párrafo
+afirmaba que la transacción cerraba la condición de carrera de dos pedidos simultáneos. **Eso era
+incorrecto.** Con el aislamiento por defecto de PostgreSQL (Read Committed), dos transacciones pueden leer
+«equipo libre» antes de que alguna confirme, y las dos insertan. Se reprodujo contra un Postgres 16 real:
+8 pedidos simultáneos por el mismo equipo dejaron más de un préstamo activo en **20 de 20 rondas**. La
+garantía real es ahora un **índice único parcial** en la base (migración
+`20261026120000_prestamo_activo_unico`: `UNIQUE ("equipoId") WHERE "fechaDevolucionReal" IS NULL`, la misma
+definición de «activo» que usa el código); el perdedor recibe el error `P2002` de Prisma, que el service
+traduce al mismo `409`. La transacción se conserva porque da el mensaje claro en el caso normal. Prisma no
+modela índices parciales: el índice vive sólo en la migración (comentado en `schema.prisma`). La prueba que
+lo demuestra está en `prestamos.concurrencia.test.ts` (ver «Registro de la revisión»).
 
 **Un efecto secundario esperado, no un bug:** al querer limpiar los datos de prueba, `DELETE
 /api/equipos/:id` y `DELETE /api/personas/:id` dieron `409` incluso con el préstamo ya **devuelto**
@@ -248,7 +269,7 @@ un valor fijo — se documenta acá para poder justificarla y ajustarla si hace 
 Se generó con `npm create vite@latest -- --template react-ts` y después se recortó lo que no
 correspondía a esta fase: se sacaron los assets y estilos de la landing de demo (`App.css`,
 `hero.png`, íconos), y se sacó **Oxlint** (el linter que trae el template por defecto) junto con su
-script y configuración — el análisis estático es una decisión deliberada del TP5, no algo que
+script y configuración — el análisis estático se decidió después (CodeQL, TP9), no algo que
 convenga heredar sin elegirlo a propósito. También se sacaron el `README.md` y el `.gitignore` que
 trae el scaffold: el segundo duplicaba reglas que ya cubre el `.gitignore` de la raíz del proyecto
 (una sola fuente de verdad para todo el repo, como se decidió en el TP1).
@@ -708,7 +729,7 @@ necesita y obligaba a tocar todos los controllers.
 reglas y se corrió la suite: `<`→`<=` en vencido, sacar el `ACTIVO` de `estaVencido`, `<=`→`<` en el
 límite de la ventana, `>0`→`>1` en el estado del equipo, no restar los prestados en el dashboard,
 aflojar la validación de fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo
-en rojo** y el código se restauró. Esto no es el pipeline: se corrió en mi máquina, como
+en rojo** y el código se restauró. Esto no es el pipeline: se corrió en la máquina de desarrollo (ejecutado por Claude), como
 diagnóstico, igual que dice el §2.4.
 
 ## Suite de frontend (Vitest, sin DOM): 18 tests en 3 archivos
@@ -863,10 +884,11 @@ código nuevo es de ~15 líneas ejecutables.
 
 ## Declaración de uso de IA (TP5)
 
-Usé Claude Code como asistente para extraer la lógica a funciones puras, escribir los tests, configurar
-la cobertura y armar el pipeline. Lo que verifiqué yo: corrí cada suite, hice mutación manual (cambiar
-una regla y ver el test ponerse en rojo: 7 de 7 en backend y 6 de 6 en frontend), comprobé el umbral
-forzando un valor imposible y revisé los reportes de la corrida roja y la verde.
+Claude Code extrajo la lógica a funciones puras, escribió los tests, configuró la cobertura y armó el
+pipeline. Las comprobaciones (correr cada suite, la mutación manual —7 de 7 en backend y 6 de 6 en
+frontend—, forzar un umbral imposible y leer los reportes de la corrida roja y la verde) las ejecutó Claude
+durante el desarrollo; el alumno no las repitió por su cuenta. Los reportes y corridas enlazados son los
+registros verificables.
 
 
 # TP6 — Entrega continua, entornos y rollback
@@ -999,7 +1021,7 @@ suspende el cómputo por inactividad. El smoke test lo tiene en cuenta (30 reint
    `backend could not be resolved` con `resolver: 127.0.0.11:53`: esos son los **valores por defecto de
    compose**, no los que yo había cargado en Render. Las variables de entorno se cargaron *después* del
    primer deploy y Render no reinicia el contenedor al guardarlas. Un **Manual Deploy** las aplicó.
-   Lo descarté primero probando la misma imagen en mi máquina con esos mismos valores (funcionaba), lo que
+   Se descartó primero probando la misma imagen en la máquina de desarrollo con esos mismos valores (funcionaba), lo que
    mostraba que el problema era de configuración en Render y no del código.
 2. **Un segundo 502, con otro formato**, justo después del redeploy: la cabecera
    `x-render-routing: no-deploy` mostraba que Render todavía no tenía instancia activa. Se resolvió
@@ -1034,22 +1056,22 @@ Decisiones de diseño:
 
 **Evidencia: una promoción rechazada**
 ([corrida 38189496720](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720)).
-El merge de este workflow desplegó QA y el job de PROD quedó esperando. Lo **rechacé** con este
-comentario: *«QA está recién migrado y todavía no creé ni edité ningún equipo en QA. No paso a PROD
+El merge de este workflow desplegó QA y el job de PROD quedó esperando. La cuenta del alumno lo
+**rechazó** con este comentario, que GitHub conserva: *«QA está recién migrado y todavía no creé ni edité ningún equipo en QA. No paso a PROD
 hasta verificar el flujo completo ahí.»* GitHub lo registra y la corrida termina con `deploy-prod`
 fallido: así se ve un freno humano. PROD, mientras tanto, quedó intacto (sin tablas, sin desplegar).
 
-## Aislamiento: cómo comprobé que cada entorno usa su propia base
+## Aislamiento: cómo se comprobó que cada entorno usa su propia base
 
 El error más silencioso de este TP es que PROD apunte a la base de QA: las dos `DATABASE_URL`
 difieren en una sola palabra (`app_qa` / `app_prod`), y si se cruzan **nada se pone rojo**: PROD levanta,
-contesta y el smoke da verde. Por eso lo comprobé con un dato que sólo existe en una base:
+contesta y el smoke da verde. Por eso se comprobó con un dato que sólo existe en una base:
 
-1. Inserté desde el SQL Editor de Neon, **con `app_prod` seleccionada**, un equipo inconfundible
+1. Se insertó desde el SQL Editor de Neon (consola de la cuenta del alumno, a pedido del asistente), **con `app_prod` seleccionada**, un equipo inconfundible
    (`SOY PROD`, código `PROD-AISLAMIENTO`).
 2. Pedí la lista de equipos a las dos APIs y a los dos frontends: **PROD** devolvió el equipo y **QA**
    devolvió `[]`, tanto directo a la API como a través del proxy de nginx de cada frontend.
-3. Borré el dato de prueba.
+3. Se borró el dato de prueba.
 
 Esto además es una prueba de que cada frontend apunta a **la API de su entorno** (`BACKEND_URL`).
 
@@ -1064,8 +1086,8 @@ Sobre `campusgear-api-prod` (que tiene dos deploys: el inicial `c4e31c6` y el de
   causa** en mi caso. Lo dejo registrado tal cual: en un entorno real el botón de emergencia también
   puede no estar.
 - **Alternativa que sí funcionó: redesplegar el commit anterior**
-  (*Manual Deploy → Deploy a specific commit → `c4e31c6`*). Cronometrado a mano, de confirmar a *Live*:
-  **28,48 s**. Verifiqué desde afuera que PROD quedó sano con ese commit (`/health`, dashboard con la
+  (*Manual Deploy → Deploy a specific commit → `c4e31c6`*). Tiempo leído en Render, de confirmar a *Live*:
+  **28,48 s** (no hay cronómetro independiente). Se verificó desde afuera que PROD quedó **sano** (no que corriera ese commit: el backend no expone su versión) (`/health`, dashboard con la
   base de PROD y proxy del frontend respondiendo).
 - **Volver al último commit** (`2c71e16`): **30,09 s**.
 - Para comparar, la duración de los deploys que muestra Render: 57,9 s el primero y 24,5 s el del
@@ -1085,7 +1107,7 @@ compatibles hacia atrás (agregar antes que quitar).
 **listo para producción** y hay una decisión humana para salir; en *Deployment* sale solo. Este
 proyecto es **Continuous Delivery**: todo lo verificable es automático (tests, cobertura, imágenes, deploy
 a QA con smoke) pero **producción espera una aprobación** en el environment `production`. La aprobación
-no es burocracia: la primera que usé fue un **rechazo** con un motivo concreto (todavía no había
+no es burocracia: la primera registrada fue un **rechazo** con un motivo concreto (todavía no había
 mirado QA), y el pipeline respetó el freno.
 
 **Pattern de despliegue.** Uso el que trae Render por defecto en un servicio web, un **rolling deploy
@@ -1093,8 +1115,26 @@ sobre una sola instancia**: levanta el contenedor nuevo y recién después reemp
 el pipeline añade es la **promoción escalonada** (QA primero, PROD después de la aprobación). No
 implementé blue/green ni canary: con un plan gratuito de una instancia por servicio no hay cómo mantener
 dos versiones vivas a la vez ni repartir tráfico, y pretender lo contrario sería inventar una garantía.
-**Consecuencia honesta:** en free tier no puedo asegurar cero cortes durante un deploy, y los arranques
-en frío empeoran la percepción.
+**Consecuencia honesta:** con una sola instancia no se puede asegurar cero cortes durante un deploy, y los
+arranques en frío empeoran la percepción.
+
+**Qué patrón usaríamos en una producción real con usuarios (hipotético: NO está implementado).** Una
+*promoción por etapas con despliegue canary* sobre la misma imagen que ya pasó por QA: la versión nueva
+recibe primero una fracción pequeña del tráfico (p. ej. 5 a 10 %) durante unos minutos, y se promueve al 100 %
+sólo si las señales se mantienen; el viejo queda corriendo hasta entonces. La comparación para esta app:
+
+| Criterio | Rolling (hoy) | Blue/green | Canary (elegido para producción real) |
+|---|---|---|---|
+| Costo | una instancia por servicio | duplica el entorno mientras dura el cambio | una o dos instancias extra, sólo durante la ventana |
+| Riesgo al usuario | un fallo llega a todos tras el reemplazo | el cambio es todo o nada, aunque se prueba antes | un fallo llega sólo a la fracción canaria |
+| Rollback | redeploy de la imagen anterior: decenas de segundos a minutos | casi instantáneo (se vuelve el tráfico) | casi instantáneo (se retira el canario) |
+| Observabilidad necesaria | mínima (health) | media | **alta**: hace falta comparar errores y latencia entre versiones |
+
+Se elegiría canary porque CampusGear ya tiene lo que lo vuelve viable (una sola imagen inmutable por commit,
+configuración fuera de la imagen, migraciones compatibles hacia atrás) y porque su costo extra es temporal. Su
+precondición es la observabilidad: hoy el smoke sólo dice que el entorno responde y no qué versión corre
+(ver «Qué NO prueba el smoke test»), y Sentry del TP9 aporta los errores y la latencia a comparar. **Lo
+implementado hoy es rolling sobre una instancia con promoción escalonada QA → PROD; no se afirma otra cosa.**
 
 **Qué entrega este pipeline y qué no.**
 - Entrega: imágenes `sha-<commit>` publicadas sólo desde `main` y sólo tras los tests; migración de la
@@ -1105,18 +1145,23 @@ en frío empeoran la percepción.
   qué commit corre, sólo que el entorno responde. Ambos huecos son el tema del TP7.
 - **Plan C** (si Render dejara de servir el plan gratuito): un *runner* propio de GitHub Actions con
   `docker-compose.registry.yml`, que ya usa las imágenes publicadas por el pipeline
-  (`IMAGE_SHA=<commit>`). No hace falta activarlo; queda documentado.
+  (`IMAGE_SHA=<commit>`). **No está activado ni probado**; es sólo un punto de partida. Un fallback completo
+  exigiría además dos entornos aislados desplegados por el pipeline, con aprobación y smoke: levantar Compose
+  a mano no lo satisface.
 
 ## Declaración de uso de IA (TP6)
 
-Usé Claude Code para escribir el workflow, la plantilla de nginx y las explicaciones, y para
-diagnosticar fallas leyendo logs. Lo que hice yo, a mano y en las consolas de cada servicio: crear las
-cuentas y servicios de Neon y Render, cargar las `DATABASE_URL` y los deploy hooks como secrets (nunca
-pasaron por el chat), aprobar y **rechazar** promociones, ejecutar el dato `SOY PROD` en la base y
-cronometrar el rollback. Los dos 502 de los frontends los resolvimos juntos: yo copié los logs de
-Render, la IA propuso la causa y yo apliqué el redeploy.
+Claude Code escribió el workflow, la plantilla de nginx y las explicaciones, y diagnosticó fallas leyendo
+logs. El alumno creó las cuentas y servicios de Neon y Render, y en sus consolas se cargaron las
+`DATABASE_URL` y los deploy hooks como secrets (no pasaron por el chat). Quedan registradas en GitHub, bajo su
+cuenta, la aprobación y el **rechazo** de promociones. El dato `SOY PROD`, el aislamiento y el rollback se
+hicieron en las consolas de esa cuenta siguiendo indicaciones de Claude; no hay constancia de que el alumno
+los haya comprobado de forma independiente. Los dos 502 de los frontends se diagnosticaron a partir de logs de
+Render pegados en la conversación: Claude propuso la causa y se aplicó el redeploy.
 
-# TP7 — Imagen inmutable, integración y extremo a extremo
+# TP7 — Imagen única por commit, integración y extremo a extremo
+
+> *Título corregido el 26/10/2026: «inmutable» era demasiado fuerte; ver «Construir una vez, desplegar muchas».*
 
 ## Los entornos ejecutan la imagen que el pipeline construyó
 
@@ -1174,7 +1219,7 @@ imperfecta **al romper la app a propósito** (mutación), y se corrigió dos vec
 Además, un clic sobre un elemento que no existe tardaba 60 s en fallar; con `actionTimeout: 15 s` tarda
 15 s, que es lo que importa cuando un fallo bloquea una promoción.
 
-**Mutación (rompí la app y miré qué se ponía rojo):**
+**Mutación (se rompió la app a propósito para ver qué se ponía rojo; ejecutado por Claude):**
 
 | Rotura | Integración (API) | E2E (navegador) |
 |---|---|---|
@@ -1215,7 +1260,7 @@ de PROD seguía sirviendo «Crear equipo». La versión rota llegó a QA y nunca
 
 **2. Corrección** ([PR #54](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/54)): revertí el cambio. **Corrida verde:**
 [https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39314848236). La integración y la e2e pasaron, el job de
-PROD quedó esperando y lo aprobé. Después de eso, el front de QA y el de PROD sirven **el mismo archivo
+PROD quedó esperando y la cuenta del alumno lo aprobó (registrado en GitHub). Después de eso, el front de QA y el de PROD sirven **el mismo archivo
 JavaScript** (`index-BfBqAaE1.js`): lo que probó la e2e en QA es lo que corre en PROD, no una segunda
 construcción.
 
@@ -1234,11 +1279,35 @@ corre los tests. De ahí en adelante sólo viaja su etiqueta:
   (`DATABASE_URL`, `BACKEND_URL`, `DNS_RESOLVER`), que está **fuera** de la imagen (TP6).
 - Los hooks de Render llevan `imgURL=<imagen>:sha-<commit>`. Render ya no compila: descarga y arranca.
   Efecto medido: la api de QA pasó de 24 a 43 s por deploy (reconstruyendo) a **10,3 s** (ejecutando).
-- **Etiquetas:** `sha-<commit>` identifica qué código produjo cada imagen; no existe `latest`, porque una
-  etiqueta que se mueve no dice qué se verificó.
+- **Etiquetas, no digests.** `sha-<commit>` identifica el **origen** (qué commit produjo la imagen) por
+  convención; no existe `latest`. Pero un tag del registry **puede moverse**: nada impide volver a publicar otro
+  contenido bajo el mismo `sha-…`, y reconstruir el mismo commit tampoco garantiza bytes idénticos si cambió una
+  imagen base o una dependencia sin fijar. Lo que identifica el **contenido** es el *digest*
+  (`sha256:…`). Este pipeline promueve por tag, lo cual la guía permite; no se implementó la promoción por
+  digest, y por eso «lo que probó la e2e en QA es lo que corre en PROD» vale como comportamiento de **una
+  corrida** (la misma construcción, un tag, dos entornos), no como garantía criptográfica.
 - **De la release a la imagen:** el tag `vN.0.0` del repositorio es un hito del curso y apunta a un
   commit; ese commit tiene su imagen `sha-<commit>` en los dos paquetes. Release → commit → imagen es una
   cadena de una sola dirección y sin ambigüedad. `v7.0.0` va sobre el commit que **está en PROD**.
+
+## Límites conocidos de las pruebas de TP7
+
+- **QA es un entorno compartido.** El `concurrency` de `deploy-qa` evita dos *despliegues* a la vez, pero no
+  reserva QA mientras corren los jobs siguientes: otra corrida puede terminar su `deploy-qa` (cambiando la
+  imagen de QA) mientras `integracion` o `e2e` de la anterior todavía prueban, y esas pruebas validarían una
+  versión que no es la suya. Reglas de uso: **un merge por vez durante la cadena**, y **descartar (rechazar) una
+  promoción a PROD cuya prueba coincidió con otro despliegue a QA**. El `concurrency` de PROD tampoco prueba
+  que QA haya quedado aislado: sólo serializa el despliegue final.
+- **Los préstamos no se prueban contra la base real en estas suites.** Las tres integraciones y los tres
+  flujos e2e trabajan sobre **equipos**, porque la API no borra préstamos y un préstamo de prueba ensuciaría QA
+  para siempre. La lógica de préstamos se prueba con dobles (unitarios) y, desde la revisión del 26/10/2026,
+  la regla de unicidad se prueba además contra un Postgres efímero en el pipeline (ver «Registro de la
+  revisión»). No se afirma que toda la interfaz o toda la aplicación estén cubiertas por la e2e.
+- **Limpieza.** Cada prueba limpia lo que crea y la limpieza se **comprueba**: las integraciones comprueban
+  el `204` del borrado y que el código ya no aparece en la lista; el `afterEach` de la e2e exige `204` por cada
+  borrado y que ningún equipo del test siga en la base (corregido el 26/10/2026: antes el tercer caso de
+  integración y el `afterEach` borraban sin comprobar). `finally` no garantiza la limpieza por sí solo (la red o
+  el borrado pueden fallar): por eso se verifica.
 
 ## Qué NO prueba el smoke test
 
@@ -1255,11 +1324,11 @@ atrás sin avisar.
 
 ## Declaración de uso de IA (TP7)
 
-Usé Claude Code para escribir las suites de Playwright, el workflow del gate y las explicaciones.
-Lo que hice yo: cambiar la fuente de los cuatro servicios de Render a imagen, aprobar las promociones
-(incluida la que decidía qué llegaba a producción) y mirar *Events* de cada servicio. La IA encontró,
-rompiendo la app a propósito, dos defectos de limpieza en mis propias pruebas (dejaban equipos de prueba
-sin borrar cuando fallaban); se corrigieron antes de usarlas contra QA.
+Claude Code escribió las suites de Playwright, el workflow del gate y las explicaciones. El cambio de la fuente
+de los cuatro servicios de Render a imagen se hizo en la consola de la cuenta del alumno, siguiendo
+indicaciones; la aprobación de las promociones consta en GitHub bajo su cuenta, y *Events* de Render es el
+registro de qué imagen corrió. Rompiendo la app a propósito, Claude encontró dos defectos de limpieza en las
+propias pruebas (dejaban equipos de prueba sin borrar cuando fallaban) y se corrigieron antes de usarlas contra QA.
 
 # TP8 — Infraestructura como código
 
@@ -1343,38 +1412,50 @@ las leen los providers del entorno de mi terminal.
 3. **`org_id` con un salto de línea**, por haber cerrado mal las comillas en el `export`: se veía como un bloque
    `<<-EOT` en el `plan` *antes* de tocar nada. Lo corregí en el código con `trimspace`.
 4. **El esquema de una base nueva** (ver arriba) y el `PORT=80` del front, que la guía no necesitaba.
-5. **Dos veces se me coló un valor sensible en lo que copiaba de la terminal** (una clave en un mensaje): lo
-   traté como filtrado. Regla desde entonces: pegar solo desde `terraform plan`, nunca las líneas con `export`.
+5. **Una clave de Render quedó expuesta en la conversación con el asistente** (se pegó una línea de `export`
+   al copiar texto de la terminal; en ese momento Claude la tuvo a la vista, con lo cual la afirmación «la IA no
+   tuvo acceso a mis claves» del párrafo de IA no es absoluta). La credencial **se debe tratar como filtrada** y se
+   debe revocar en Render (*Account Settings → API Keys*) y reemplazar. **Estado de la revocación: PENDIENTE DE
+   CONFIRMAR** —no hay constancia de que se haya hecho, y esta revisión no puede comprobarlo sin acceder a la
+   cuenta—. Cuando se haga, registrar acá la fecha. Regla desde entonces: pegar sólo desde `terraform plan`,
+   nunca líneas con `export`. (No se reproduce ningún valor en este documento.)
 
 ## Declaración de uso de IA (TP8)
 
-Usé Claude Code para escribir el HCL, el workflow y los textos. Lo que hice yo: crear las claves, exportarlas en
-mi terminal, correr `plan`, `apply` y `destroy`, borrar y crear cosas a mano en las consolas de Neon y Render
-para provocar el drift, y leer cada plan antes de aplicarlo. La IA no tuvo acceso a mis claves ni corrió
-Terraform contra mis cuentas: comprobó desde afuera (`curl` a `/health`, a un endpoint que toca la base y al
-proxy del front) que el entorno quedó funcionando, y revisé yo la salida de cada comando.
+Claude Code escribió el HCL, el workflow y los textos. Las claves de Neon y Render las creó el alumno en sus
+cuentas y se exportaron en su terminal, que es donde se corrieron `plan`, `apply` y `destroy` (Claude no ejecutó
+Terraform contra esas cuentas); también en esas consolas se borraron y crearon recursos a mano para provocar el
+drift. Claude comprobó desde afuera (`curl` a `/health`, a un endpoint que toca la base y al proxy del front) que
+el entorno quedó funcionando. Excepción: una clave de Render apareció una vez en la conversación (ver «Problemas
+que tuve», punto 5). Este documento no certifica que el alumno haya leído y comprendido cada plan: eso se
+refuerza en la revisión posterior.
 
 # TP9 — DevSecOps y observabilidad
 
-## Dependencias: el PR de Dependabot que mergeé
+## Dependencias: el PR de Dependabot que se mergeó
 
 Dependabot quedó activo en cinco lugares (`npm` del backend y del frontend, las GitHub Actions y las imágenes base de
 los dos Dockerfiles), con las **alertas** y las **actualizaciones de seguridad** prendidas. A los pocos minutos del
 merge abrió PRs; los dos primeros arreglaban vulnerabilidades publicadas, no eran versiones rutinarias.
 
-**Mergeé el [#59](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/59): `proxy-addr` de 2.0.7 a 2.0.8, en `/backend`.**
+**Se mergeó el [#59](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/59): `proxy-addr` de 2.0.7 a 2.0.8, en `/backend`.**
 - **Qué es:** un cambio de **patch** (SemVer: solo arreglos) que toca únicamente `package-lock.json`, ni una línea
   de mi código. La dependencia no la escribí yo: la trae Express (`express@5.2.1 → proxy-addr`), que es justo el
   punto de la guía: casi todo lo que mi backend ejecuta no lo escribí.
 - **Por qué importaba:** arreglaba GHSA-jqcg-44mw-7w3h (CVE-2026-90711), suplantación de IP por una subred IPv4
   mapeada en IPv6, severidad **crítica** (CVSS 9.1) y de **runtime**.
-- **¿Era explotable en CampusGear? No.** Revisé el código del backend: no usa `trust proxy`, ni `req.ip`, ni
+- **¿Era explotable en CampusGear? No.** Se revisó el código del backend (revisión asistida, no un análisis completo del advisory): no usa `trust proxy`, ni `req.ip`, ni
   cabeceras `x-forwarded`. Esa falla solo importa cuando una app confía en la IP que declara el cliente. Se
   actualizó igual, porque no cuesta nada y evita que un cambio futuro la vuelva explotable.
-- **Por qué me animé a mergearlo:** un patch que solo cambia el lockfile, con changelog que solo menciona el
-  arreglo, y con **mi pipeline en verde sobre ese PR**: los 32 tests, el umbral de cobertura, las imágenes, y la
-  integración y la e2e en QA. Ese verde es todo el semestre diciéndome «podés». Sin esa red, un update de
-  dependencia da miedo y se posterga.
+- **Por qué había confianza para mergearlo** (dos momentos distintos, que no hay que mezclar):
+  1. *Verificaciones del PR (antes del merge):* un patch que solo cambia el lockfile, con changelog que solo
+     menciona el arreglo, y los checks requeridos en verde sobre el PR: `build-backend` y `build-frontend`
+     (tests unitarios, umbral de cobertura, construcción de las imágenes). En el PR, `deploy-qa`,
+     `integracion`, `e2e` y `deploy-prod` aparecen **omitidos** por diseño: sólo corren en `push` a `main`.
+  2. *Pruebas posteriores al merge:* ya en `main`, la cadena completa —deploy a QA con smoke, integración, e2e,
+     aprobación y deploy a PROD— terminó en verde
+     ([corrida 39470387567](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/39470387567)).
+     Esa corrida confirma el parche en los entornos; no es una verificación previa que respaldara el merge.
 - **Resultado:** la alerta crítica pasó a `fixed` sola al aparecer `proxy-addr 2.0.8` en `main`.
 - **Los mayores no se mergean a ciegas:** `prisma 7/8`, `zod 4` y `typescript 7` quedan para analizarse con
   calma, porque pueden traer cambios incompatibles.
@@ -1397,20 +1478,20 @@ merge abrió PRs; los dos primeros arreglaban vulnerabilidades publicadas, no er
 
 ## Monitoreo externo y la caída provocada
 
-Monitor de UptimeRobot sobre el `/health` de PROD (el plan gratuito pregunta con `HEAD`; comprobé que mi endpoint
-responde 200 a `HEAD`, Express lo hace solo). Provoqué una caída suspendiendo el servicio de la api de PROD en Render
-(20/10):
+Monitor de UptimeRobot sobre el `/health` de PROD (el plan gratuito pregunta con `HEAD`; se comprobó que el endpoint
+responde 200 a `HEAD`, Express lo hace solo). Se provocó una caída suspendiendo el servicio de la api de PROD en Render
+(20/10, desde la consola de la cuenta del alumno; las horas son las anotadas en ese momento):
 
 | Evento | Hora local |
 |---|---|
-| Suspendí el servicio | 23:00 |
+| Se suspendió el servicio | 23:00 |
 | Mi observador ve el primer 503 | 23:00:37 |
 | **Aviso DOWN del monitor** | **23:02** |
 | `/health` vuelve a dar 200 | 23:03:01 |
 | Aviso UP del monitor | 23:03 |
 
-**Tiempo de detección: ~2 minutos** (con chequeos cada 5 minutos el peor caso sería 5); caída de ~2 minutos y medio.
-Abrir `/health` yo mismo después de reanudar lo despertó; sin eso el UP puede tardar más de 20 minutos. **Es externo**
+**Tiempo de detección medido: ~2 minutos** (del primer 503 observado, 23:00:37, al aviso DOWN, 23:02), en **una sola** observación; la caída duró ~2 minutos y medio. Con un intervalo de chequeo de 5 minutos un fallo se detectaría, en general, dentro de ese intervalo más el tiempo de notificación, pero **no es un máximo garantizado** y esta medición no lo prueba.
+Abrir `/health` a mano después de reanudar lo despertó; sin eso el UP puede tardar más de 20 minutos. **Es externo**
 porque si mi infraestructura se cae, un monitoreo interno se cae con ella; sin él, la caída la habría anunciado un
 usuario. **La regla:** el monitor se pausa al terminar el ejercicio, porque un servicio gratuito despierto todo el mes
 consume las 750 horas del workspace y, si se pasan, Render suspende todos los servicios, producción incluida.
@@ -1424,7 +1505,7 @@ y desplegado por la cadena completa. Coste visible: el bundle del frontend pasó
 
 - **Un error:** `Error: Falla de prueba del TP9` (`CAMPUSGEAR-BACKEND-1`, `GET /api/falla`, `environment: production`),
   de un endpoint temporal que agregué y saqué por otro PR.
-- **Mi uso real** (tabla *Traces → Aggregates*, últimas 24 h, pedidos completos):
+- **Uso real, dato medido** (tabla *Traces → Aggregates*, ventana «últimas 24 h» al momento de la captura, entre el 20 y el 24/10/2026 (fecha exacta no registrada; la ventana ya no es esa hoy), pedidos completos; el panel de Sentry no se reabrió en la revisión del 26/10):
 
 | Operación | Pedidos | p95 |
 |---|---|---|
@@ -1434,9 +1515,9 @@ y desplegado por la cadena completa. Coste visible: el bundle del frontend pasó
 | `GET /api/personas` | 5 | 196,90 ms |
 | `PATCH /api/equipos/:id` | 2 | 253,03 ms |
 
-- **Por qué el dashboard es lo más lento:** es la página de inicio, así que suele ser el primer pedido tras un rato
+- **Hipótesis, no causa demostrada, sobre por qué el dashboard es lo más lento:** es la página de inicio, así que suele ser el primer pedido tras un rato
   sin uso y paga el arranque en frío de la base gratuita (Neon la suspende a los 5 minutos); con solo 9 pedidos el p95 es
-  casi el máximo. Además `obtenerResumen` hace dos consultas en serie que no dependen entre sí.
+  casi el máximo. Además `obtenerResumen` hace dos consultas en serie que no dependen entre sí (eso sí se ve en el código). Con 9 pedidos no se puede separar el efecto del arranque en frío del de las consultas: **próximo experimento** —medir el mismo endpoint en frío y en caliente, y con las consultas en paralelo— antes de afirmar la causa.
 - **Lo que Sentry me dice que el monitor no:** el monitor solo responde «¿estás viva?»; Sentry me dice qué falla,
   qué tarda, y cuánto se usa cada cosa.
 - **La tarjeta:** [#75](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/issues/75) en mi tablero, con el número adentro, nacida de ese dato (feedback: lo que
@@ -1451,7 +1532,8 @@ Con el historial real de `main`, desde que el pipeline tiene `deploy-prod` (12/1
 | Frecuencia de despliegue | **9 despliegues a PROD en 10,8 días** (0,83/día) | corridas de `main` con `deploy-prod: success` |
 | Lead time (merge → PROD) | mediana **6 min**; mínimo 3 min; máximo 26 h 42 min | commit de merge contra el fin de `deploy-prod`; el máximo es **espera de mi aprobación**, no lentitud del pipeline. No incluye el tiempo de escribir el código |
 | Tasa de fallo | **1 de 9 ≈ 11 %** | el despliegue de Sentry (ver `postmortem.md`) |
-| Tiempo de recuperación | **28,5 s** (rollback por commit del TP6); ~10 min en el incidente de Sentry; ~2 min de detección de la caída provocada | mis cronometrajes |
+| Tiempo de recuperación | **28,5 s**: sólo el redeploy técnico del rollback por commit del TP6 (leído en Render); **~10 min**: duración del incidente de Sentry hasta tener la configuración correcta | dos mediciones distintas, no comparables entre sí |
+| *(no es recuperación)* Tiempo de detección | ~2 min en la caída provocada del monitor | ver «Monitoreo externo»; es detección, no recuperación |
 
 El gate además evitó un fallo en producción (la rotura del botón se frenó en QA) y cinco corridas no llegaron a PROD
 (dos rechazadas, dos canceladas, una salteada por la e2e roja). La métrica que movería primero es la **tasa de fallo**,
@@ -1470,18 +1552,84 @@ descartó con los eventos de Render; la causa del frontend desfasado queda **sin
 2. **El frontend de PROD no sirvió el bundle nuevo a los ~4 minutos del despliegue «exitoso»**, causa no determinada.
 3. **Una aprobación de PROD olvidada** de un PR anterior retuvo el grupo de `concurrency` y dejó en cola la corrida
    siguiente; se resolvió rechazando la vieja y aprobando la nueva.
-4. **Se me coló una clave de Render en un mensaje al asistente** durante el TP8 (la traté como filtrada: hay que
-   revocarla y reemplazarla).
+4. **Una clave de Render quedó expuesta en la conversación con el asistente** durante el TP8. Debe tratarse como
+   filtrada: revocarla y reemplazarla. **Revocación: pendiente de confirmar** (no comprobada; no se reproduce el valor).
 5. La interfaz de Sentry no coincidía con la de la guía (*Insights → Backend* no existía): encontré las tablas en
    *Explore → Traces*.
 
 ## Declaración de uso de IA (TP9)
 
-Usé Claude Code para escribir la configuración de Dependabot, el código de Sentry, el endpoint temporal, el
-postmortem, esta sección y para consultar la API de GitHub. Lo que hice yo, en cada consola: crear las cuentas y
-los proyectos de UptimeRobot y Sentry, cargar las variables en Render, suspender y reanudar el servicio, aprobar
-cada despliegue a producción, usar la aplicación para generar los datos y crear el sprint del tablero. Cómo lo verifiqué:
-cada cambio pasó mi pipeline completo; comprobé los hechos desde afuera con `curl` (bundle servido, endpoint
-removido) y contra los eventos de Render y de GitHub, y descarté una hipótesis del asistente (un despliegue manual)
-cuando los eventos la contradijeron. Puedo mostrar funcionando cada pieza y explicar qué mira y qué no.
+Claude Code escribió la configuración de Dependabot, el código de Sentry, el endpoint temporal, el postmortem y
+esta sección, y consultó la API de GitHub. El alumno creó las cuentas y los proyectos de UptimeRobot y Sentry;
+en sus consolas se cargaron las variables en Render, se suspendió y reanudó el servicio y se usó la aplicación
+para generar datos; GitHub registra bajo su cuenta las aprobaciones de despliegue y el sprint del tablero. Las
+comprobaciones (`curl` al bundle servido y al endpoint removido, lectura de la API de GitHub, contraste con
+*Events* de Render) las hizo Claude, que también descartó una hipótesis propia (un despliegue manual) cuando los
+eventos la contradijeron. Cada cambio pasó el pipeline. Este documento no certifica que el alumno pueda
+explicar hoy cada pieza: eso se trabaja en la revisión posterior.
 
+# Registro de la revisión del 26/10/2026
+
+Revisión asistida por Claude Code de este documento, contrastada con el código, las guías y las evidencias del
+repositorio, a partir del informe `revision-decisiones-campusgear.md`. **Lo que sigue se comprobó en esta
+revisión, no durante el desarrollo original.** Se conservan los tags y las evidencias históricas (corridas,
+PRs, releases): no se tocó ninguno.
+
+## Qué se confirmó
+- Existen las releases `v1.0.0` a `v9.0.0`; `v6.0.0`, `v7.0.0`, `v8.0.0` y `v9.0.0` apuntan a commits cuya
+  corrida terminó con `deploy-prod` en verde.
+- Los paquetes `ingsoft3-tp01-backend` y `-frontend` son públicos (la lista de tags responde sin credenciales).
+- Secrets de QA y PROD sólo en sus environments; `production` exige revisor (con *prevent self-review* apagado);
+  la protección de `main` exige `build-backend` y `build-frontend`.
+- Dependabot (5 ecosistemas), alertas y security updates, secret scanning y push protection activos; CodeQL
+  configurado, último análisis sin error.
+- El PR #59 corre sólo `build-backend` y `build-frontend`; las demás etapas se omiten en PR (ver TP9).
+- QA y PROD no tenían préstamos activos al migrar (lectura `GET /api/prestamos?estado=activo`, 0 en ambos): la
+  nueva migración no choca con datos existentes.
+
+## Qué se corrigió
+- **Código (problema real de concurrencia):** `crearPrestamo` permitía prestar el mismo equipo dos veces con
+  pedidos simultáneos. Corregido con un índice único parcial en la base y traducción del `P2002` a `409`
+  (sección «API de Préstamos»).
+- **Pruebas de limpieza:** el tercer caso de integración y el `afterEach` de la e2e ahora comprueban los
+  borrados.
+- **Pipeline:** `build-backend` levanta un Postgres efímero, aplica las migraciones y corre la prueba de
+  concurrencia contra una base real.
+- **Afirmaciones de `decisiones.md`:** la transacción ya no se presenta como garantía; PR frente a post-merge
+  en Dependabot; tag frente a digest; QA compartido; hipótesis separada del dato en Sentry; detección separada de
+  recuperación; el «peor caso de 5 minutos» ya no se afirma; Plan C sin presentarse como probado; mención al
+  análisis estático (TP9, no TP5); enlaces a la release propia de cada TP; patrón de producción real de TP6.
+- **Autoría:** el encabezado y las declaraciones de IA de TP1, TP5, TP6, TP7, TP8 y TP9 ya no atribuyen al
+  alumno verificaciones que no se le pueden atribuir.
+
+## Pruebas ejecutadas en esta revisión (por Claude)
+| Prueba | Resultado |
+|---|---|
+| Reproducción de la carrera (código original, Postgres 16 real, 8 pedidos simultáneos × 20 rondas) | más de un préstamo activo por equipo en 20 de 20 rondas |
+| `prestamos.concurrencia.test.ts` sin el índice | 5 de 6 fallan (la regla no se cumple) |
+| Misma suite con el índice, 6 corridas consecutivas | 6 de 6 pasan (1 ganador, el resto `409`, 1 préstamo activo) |
+| Reutilización: devolver y volver a prestar el mismo equipo | pasa (el índice no incluye devueltos) |
+| Suite completa del backend, sin base (como antes) | 34 pasan, 6 se saltean; umbrales de cobertura cumplidos |
+| Suite completa con base y cobertura | 40 de 40 pasan |
+| Emulación local de los pasos nuevos de `build-backend` (red, Postgres, migrate, tests con cobertura) | verde |
+| Compose local: 10 `POST /api/prestamos` simultáneos al mismo equipo | 1 × `201`, 9 × `409` |
+| Playwright integración (3) y e2e (3) contra el compose local, con las comprobaciones de limpieza nuevas | 6 de 6 pasan |
+| `tsc --noEmit`, `prisma validate`, YAML del workflow | sin errores |
+
+Limitación: el workflow modificado todavía no se ejecutó en GitHub Actions; se probó su secuencia en local.
+
+## Qué sigue pendiente (hechos que necesitan confirmación)
+1. **Revocación de la clave de Render expuesta:** no comprobada. Pendiente de la cuenta del alumno.
+2. **Qué acciones hizo el alumno por su cuenta** más allá de crear cuentas (ejecutar Terraform, operar consolas,
+   medir el rollback): el texto describe lo que dejan los registros y no lo afirma como verificación propia. El
+   alumno debe confirmar o corregir cada punto antes de la defensa.
+3. **Monitor de UptimeRobot pausado** y datos de Sentry/UptimeRobot vigentes el día de la defensa (vencen a los
+   30 días).
+4. **El rollback no probó la versión:** el backend no expone su commit; sólo se verificó que PROD quedó sano.
+   Mejora pendiente (acción 1 del postmortem).
+5. **Las suites e2e/integración no ejercitan préstamos contra QA** (decisión documentada); la unicidad queda
+   cubierta por la prueba de base real del pipeline.
+6. **Reorganizar `decisiones.md`** (el TP1 concentra ~3.500 palabras y menciona fases de un plan maestro que no
+   está en el repositorio): no se hizo para no tocar entregables; es una mejora de navegación.
+7. **Merge y despliegue:** los cambios están en una rama; al integrarlos, la migración se aplicará en QA y luego
+   en PROD (con la aprobación habitual) y el `build-backend` se verá por primera vez en Actions.
