@@ -222,11 +222,14 @@ Las 6 reglas del enunciado se probaron una por una por HTTP, contra el servidor 
    que pueda dejar un equipo "disponible" con un préstamo activo sin devolver, porque el estado no
    se guarda por separado: se lee siempre de la misma fuente.
 
+### Concurrencia de préstamos: corrección del 26/10/2026
+
 **Reglas 1 y 2: transacción e índice único parcial.** `crearPrestamo` usa una transacción para buscar
 el equipo y la persona, comprobar la disponibilidad y crear el préstamo. La transacción por sí sola
 no evita dos préstamos simultáneos: con Read Committed, dos pedidos pueden leer «equipo libre» antes
-de que alguno confirme. Este problema apareció durante el desarrollo y se resolvió con un índice
-único parcial: `UNIQUE ("equipoId") WHERE "fechaDevolucionReal" IS NULL`, definido en la migración
+de que alguno confirme. La carrera se detectó en la revisión del 26/10/2026, después de completar
+el desarrollo del TP9 y antes de entregar el proyecto. Se resolvió con un índice único parcial:
+`UNIQUE ("equipoId") WHERE "fechaDevolucionReal" IS NULL`, definido en la migración
 `20261026120000_prestamo_activo_unico`. Así, la base admite un solo préstamo activo por equipo y el
 service traduce el error `P2002` de los demás intentos a `409`. Los préstamos devueltos quedan fuera
 del índice, por lo que el equipo se puede volver a prestar. El índice está en la migración SQL,
@@ -235,6 +238,24 @@ con una referencia en `schema.prisma`.
 La comprobación está en `prestamos.concurrencia.test.ts`, contra PostgreSQL real. Se conserva la
 validación previa del service para responder con un mensaje claro cuando el equipo ya está prestado.
 La restricción de base cubre el caso en que dos pedidos pasan esa validación al mismo tiempo.
+
+**Reproducción del defecto.** Antes de aplicar el índice, Claude registró una prueba contra
+PostgreSQL 16 real: ocho pedidos simultáneos por el mismo equipo, repetidos en veinte rondas.
+La base terminó con más de un préstamo activo por equipo en **20 de 20 rondas**. Ese resultado
+mostró que los unitarios con dobles y la transacción existente no garantizaban la unicidad.
+
+**Pruebas de la corrección.** En esa revisión se agregó
+`prestamos.concurrencia.test.ts`: cinco rondas de ocho pedidos simultáneos y un caso de devolución
+y nuevo préstamo. Con el índice, cada ronda deja un solo préstamo activo; al quitarlo únicamente
+en una base descartable, fallan los cinco casos de concurrencia. La suite completa con base pasó
+40 de 40 tests. `build-backend` levanta un PostgreSQL efímero, aplica las migraciones y ejecuta estas
+pruebas con la cobertura.
+
+La [corrida 40408917673](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/40408917673)
+del [PR #78](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/78), sobre `8746832`, dejó los
+checks de backend y frontend en verde. En esa corrida se omitieron los despliegues por ser un PR.
+La aplicación del índice en QA y PROD se debe comprobar en la cadena de `main` después del merge;
+los tests de la base efímera no demuestran que esos entornos ya tengan la migración.
 
 **Un efecto secundario esperado, no un bug:** al querer limpiar los datos de prueba, `DELETE
 /api/equipos/:id` y `DELETE /api/personas/:id` dieron `409` incluso con el préstamo ya **devuelto**
@@ -718,30 +739,27 @@ fecha y apagar el chequeo de préstamo activo. **Los 7 mutantes pusieron algo en
 restauró el código. Fue una comprobación local de Claude, separada del pipeline, para revisar si los
 tests detectaban cambios en las reglas.
 
-**Prueba de concurrencia con base real.** Además de los unitarios, se agregó
-`prestamos.concurrencia.test.ts`: cinco rondas de ocho pedidos simultáneos y un caso de devolución
-y nuevo préstamo. Con el índice, cada ronda deja un solo préstamo activo; al quitarlo únicamente
-en una base descartable, fallan los cinco casos de concurrencia. La suite completa con base pasó
-40 de 40 tests. `build-backend` levanta un PostgreSQL efímero, aplica las migraciones y ejecuta estas
-pruebas con la cobertura.
-
-La [corrida 40408917673](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/40408917673)
-del [PR #78](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/pull/78), sobre `8746832`, dejó los
-checks de backend y frontend en verde. En esa corrida se omitieron los despliegues por ser un PR.
-La aplicación del índice en QA y PROD se debe comprobar en la cadena de `main` después del merge;
-los tests de la base efímera no demuestran que esos entornos ya tengan la migración.
-
 ## Suite inicial de frontend (Vitest, sin DOM): 18 tests en 3 archivos
 
-Igual que en el backend, primero hubo que **sacar la lógica de los componentes**. Estaba adentro de
-`PrestamoTable`/`EquipoTable`/`PrestamoForm`, donde sólo se podía probar renderizando. Ahora vive en
-`frontend/src/lib/` como funciones puras y los componentes sólo las llaman:
+Se extrajo **parte de la lógica de los componentes** a funciones puras en `frontend/src/lib/` para
+probarla sin renderizar React. La extracción incluye formato y conversión de fechas y etiquetas de
+estado. Más adelante se agregó la función de textos de vencimiento para demostrar el gate. Los
+componentes llaman a las funciones extraídas, pero todavía conservan decisiones relacionadas con
+las reglas de préstamos. Las funciones extraídas son:
 
 - `lib/fechas.ts`: `formatearFecha` (el arreglo del off-by-one de zona horaria de la pantalla de Préstamos, que hasta
   ahora no tenía ningún test que lo protegiera) y `fechaInputAIso`, que ahora rechaza una fecha
   inválida con un mensaje en vez de dejar que `toISOString()` tire un `RangeError` críptico.
 - `lib/estados.ts`: traduce lo que **ya decidió el backend** (`estado`, `vencido`) a etiqueta + color.
   No calcula nada: el vencido sigue siendo del backend.
+
+**Límite de esta separación:** `PrestamoForm.tsx` filtra los equipos con
+`equipo.estado === "DISPONIBLE"` y `PrestamoTable.tsx` muestra el botón de devolución sólo cuando
+`prestamo.estado === "ACTIVO"`. Ambas condiciones siguen dentro de componentes excluidos de la
+cobertura de Vitest. Las pruebas de etiquetas en `lib/estados.test.ts` no verifican ese filtrado ni
+la aparición del botón. Los e2e del TP7 trabajan sobre equipos y tampoco ejercitan ese flujo de
+préstamos. Extraer esas condiciones a funciones con tests o agregar pruebas de componentes queda
+como mejora pendiente; esta suite no cubre toda la lógica del frontend.
 
 | Técnica | Dónde |
 |---|---|
@@ -795,9 +813,12 @@ porcentaje se presenta junto con el alcance medido: las exclusiones cambian el d
 
 - Backend: `server.ts` (`app.listen`), `app.ts` (cableado de middlewares), `config/env.ts` (lee
   `process.env`), `lib/prisma.ts` (instancia el cliente), `routes/**` (tabla ruta → controller).
-- Frontend: `main.tsx` (arranque), `App.tsx` (rutas), `types/**` (sólo tipos: no hay código en
-  runtime), `components/**` y `pages/**` (presentación: la suite de Vitest se definió sin DOM). El TP7 agrega
-  tres flujos de navegador sobre equipos; esos flujos no cubren toda la interfaz.
+- Frontend: `main.tsx` (arranque), `App.tsx` (rutas) y `types/**` (sólo tipos, sin código en runtime).
+  También se excluyen `components/**` y `pages/**` porque esta suite se definió sin DOM. Esa exclusión
+  es una limitación del alcance elegido: los componentes no son sólo presentación, ya que conservan
+  condiciones como el filtrado de equipos disponibles y la aparición del botón de devolución. Por eso
+  esos caminos no entran en el porcentaje informado. Los tres e2e del TP7 prueban flujos de equipos
+  y no compensan la falta de pruebas de esas condiciones de préstamos.
 - **No se excluye**: controllers, services, domain, schemas, middlewares, `api/` ni `lib/`. Los
   controllers y `validate.ts` hoy están en 0 % y siguen contando; excluirlos habría subido el número
   sin que el código estuviera más protegido.
@@ -1055,10 +1076,12 @@ Decisiones de diseño:
 **Evidencia: una promoción rechazada** ([corrida
 38189496720](https://github.com/AlesioCobresiSerravalle/ingsoft3-tp01/actions/runs/38189496720)). El
 merge de este workflow desplegó QA y el job de PROD quedó esperando. La promoción se **rechazó** con
-este comentario, registrado en GitHub: *«QA está recién migrado y todavía no creé ni edité ningún
-equipo en QA. No paso a PROD hasta verificar el flujo completo ahí.»* GitHub lo registra y la
-corrida termina con `deploy-prod` fallido: así se ve un freno humano. PROD, mientras tanto, quedó
-intacto (sin tablas, sin desplegar).
+este comentario literal:
+
+> Rechazado.QA esta recien migrado y todavía no cree ni edite ningun equipo en QA.no paso a PROD hasta verificar el flujo completo ahi
+
+La corrida termina con `deploy-prod` fallido: así se ve un freno humano. PROD, mientras tanto,
+quedó intacto (sin tablas, sin desplegar).
 
 ## Aislamiento: cómo se comprobó que cada entorno usa su propia base
 
@@ -1222,13 +1245,13 @@ Además, un clic sobre un elemento que no existe tardaba 60 s en fallar; con `ac
 | `POST /api/equipos` responde 200 en vez de 201 | **1 rojo** (la de creación) | no se ejecutó |
 
 La primera fila es exactamente el caso que justifica tener las dos suites: la API está sana, la
-interfaz no, y sólo la e2e lo ve. En la estructura inicial2 se usa para demostrar que el gate frena
-la promoción.
+interfaz no, y sólo la e2e lo ve. El apartado siguiente muestra cómo esa diferencia se usó para
+demostrar que el gate frena la promoción.
 
 **Dónde se corre:** probado contra el `docker compose` local (los servicios de Render son
 compartidos y gastan horas gratuitas: se prueba primero en casa). La integración se apunta a la API
-de QA con `API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`; el pipeline las ejecuta en la
-estructura inicial2.
+de QA con `API_BASE_URL` y la e2e al front de QA con `E2E_BASE_URL`. En la cadena de `main`, ambas
+se ejecutan después de desplegar QA y antes de pedir la aprobación de PROD.
 
 ## El gate de promoción: la demostración
 
@@ -1302,8 +1325,8 @@ imagen de ejecución, QA y PROD la descargan sin reconstruirla:
 - **Los préstamos no se prueban contra la base real en estas suites.** Las tres integraciones y los tres
   flujos e2e trabajan sobre **equipos**, porque la API no borra préstamos y un préstamo de prueba ensuciaría QA
   para siempre. La lógica de préstamos se prueba con dobles (unitarios) y la regla de unicidad se
-  comprueba además contra un Postgres efímero en el pipeline, como se describe en el TP5. Estos
-  casos no cubren toda la interfaz ni toda la aplicación.
+  comprueba además contra un Postgres efímero en el pipeline, como se describe en «API de Préstamos».
+  Estos casos no cubren toda la interfaz ni toda la aplicación.
 - **Limpieza.** Cada prueba limpia lo que crea y la limpieza se **comprueba**: las integraciones comprueban
   el `204` del borrado y que el código ya no aparece en la lista; el `afterEach` de la e2e exige `204` por cada
   borrado y que ningún equipo del test siga en la base. `finally` no garantiza la limpieza por sí solo (la red o
