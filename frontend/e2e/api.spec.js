@@ -73,6 +73,10 @@ test("un código duplicado se rechaza con 409 y el equipo original no se toca", 
     expect(conEseCodigo).toHaveLength(1);
     expect(conEseCodigo[0].nombre).toBe(datos.nombre); // el segundo no pisó al primero
   } finally {
-    await request.delete(`${API}/api/equipos/${original.id}`);
+    const borrado = await request.delete(`${API}/api/equipos/${original.id}`);
+    expect(borrado.status()).toBe(204); // la limpieza también se comprueba
   }
+
+  const despues = await listar(request);
+  expect(despues.map((e) => e.codigo)).not.toContain(datos.codigo);
 });

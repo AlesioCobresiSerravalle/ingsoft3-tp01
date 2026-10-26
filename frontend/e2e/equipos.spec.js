@@ -34,8 +34,13 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(async ({ request }) => {
   const lista = await (await request.get(`${API}/api/equipos`)).json();
   for (const e of lista.filter((x) => creados.includes(x.codigo))) {
-    await request.delete(`${API}/api/equipos/${e.id}`); // si el flujo ya lo borró, no queda nada que borrar
+    // si el flujo ya lo borró, no queda nada que borrar; si queda, se borra y se verifica
+    const r = await request.delete(`${API}/api/equipos/${e.id}`);
+    expect(r.status()).toBe(204);
   }
+  // la limpieza se COMPRUEBA: ningún equipo de este test sigue en la base
+  const despues = await (await request.get(`${API}/api/equipos`)).json();
+  expect(despues.filter((x) => creados.includes(x.codigo))).toEqual([]);
 });
 
 test("crear un equipo lo muestra en la tabla, y eliminarlo lo saca", async ({ page }) => {

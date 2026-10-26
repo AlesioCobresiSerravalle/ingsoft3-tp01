@@ -53,4 +53,8 @@ model Prestamo {
   @@index([equipoId])
   @@index([personaId])
   @@index([estado])
+  // Además existe, SÓLO en la migración 20261026120000_prestamo_activo_unico, un
+  // índice único parcial ("equipoId" WHERE "fechaDevolucionReal" IS NULL): impide
+  // dos préstamos activos del mismo equipo aunque lleguen a la vez. Prisma no
+  // modela índices parciales; no usar `migrate dev` para "reconciliarlo".
 }

@@ -39,40 +39,56 @@ export async function obtenerPrestamoPorId(id: string) {
   return conVencidoCalculado(prestamo);
 }
 
+// Violación de unicidad de Prisma (P2002). Se compara por código y no por
+// `instanceof` para no depender de cómo se importe el cliente.
+function esViolacionDeUnicidad(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2002";
+}
+
 export async function crearPrestamo(data: CrearPrestamoInput) {
-  // Reglas 1 y 2 del enunciado, resueltas dentro de una transacción: si dos
-  // requests casi simultáneos intentan prestar el mismo equipo, la segunda
-  // ve el préstamo que acaba de crear la primera y falla — no una condición
-  // de carrera silenciosa.
-  return prisma.$transaction(async (tx) => {
-    const equipo = await tx.equipo.findUnique({ where: { id: data.equipoId } });
-    if (!equipo) {
-      throw new NotFoundError("Equipo no encontrado");
-    }
+  // Reglas 1 y 2 del enunciado. La comprobación "¿ya hay un préstamo activo?"
+  // dentro de la transacción da un mensaje claro en el caso normal, pero NO
+  // alcanza ante pedidos simultáneos: con el aislamiento por defecto
+  // (Read Committed) dos transacciones pueden leer "libre" antes de que alguna
+  // confirme. La garantía real es el índice único parcial de la migración
+  // 20261026120000_prestamo_activo_unico: el perdedor falla con P2002 y acá se
+  // traduce al mismo 409 que el caso normal.
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const equipo = await tx.equipo.findUnique({ where: { id: data.equipoId } });
+      if (!equipo) {
+        throw new NotFoundError("Equipo no encontrado");
+      }
 
-    const persona = await tx.persona.findUnique({ where: { id: data.personaId } });
-    if (!persona) {
-      throw new NotFoundError("Persona no encontrada");
-    }
+      const persona = await tx.persona.findUnique({ where: { id: data.personaId } });
+      if (!persona) {
+        throw new NotFoundError("Persona no encontrada");
+      }
 
-    const prestamoActivo = await tx.prestamo.findFirst({
-      where: { equipoId: data.equipoId, fechaDevolucionReal: null },
+      const prestamoActivo = await tx.prestamo.findFirst({
+        where: { equipoId: data.equipoId, fechaDevolucionReal: null },
+      });
+      if (prestamoActivo) {
+        throw new ConflictError("El equipo ya tiene un préstamo activo");
+      }
+
+      const prestamo = await tx.prestamo.create({
+        data: {
+          equipoId: data.equipoId,
+          personaId: data.personaId,
+          fechaDevolucionPrevista: data.fechaDevolucionPrevista,
+        },
+        include: { equipo: true, persona: true },
+      });
+
+      return conVencidoCalculado(prestamo);
     });
-    if (prestamoActivo) {
+  } catch (err) {
+    if (esViolacionDeUnicidad(err)) {
       throw new ConflictError("El equipo ya tiene un préstamo activo");
     }
-
-    const prestamo = await tx.prestamo.create({
-      data: {
-        equipoId: data.equipoId,
-        personaId: data.personaId,
-        fechaDevolucionPrevista: data.fechaDevolucionPrevista,
-      },
-      include: { equipo: true, persona: true },
-    });
-
-    return conVencidoCalculado(prestamo);
-  });
+    throw err;
+  }
 }
 
 export async function registrarDevolucion(id: string) {
